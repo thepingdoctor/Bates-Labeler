@@ -38,7 +38,7 @@ pip install poetry
 poetry install
 
 # This creates a virtual environment and installs:
-# - Main dependencies: PyPDF2, reportlab, tqdm
+# - Main dependencies: pypdf, reportlab, tqdm
 # - Dev dependencies: pytest, pytest-cov, black, flake8, mypy
 ```
 
@@ -163,7 +163,7 @@ The package is configured with the following metadata for PyPI:
 ## Dependencies
 
 ### Main Dependencies
-- PyPDF2 ^3.0.1 - PDF manipulation
+- pypdf ^4.0.0 - PDF manipulation
 - reportlab ^4.0.7 - PDF generation
 - tqdm ^4.66.1 - Progress bars
 

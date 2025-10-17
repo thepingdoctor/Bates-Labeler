@@ -110,7 +110,7 @@ cd Bates-Labeler
 poetry install
 
 # This installs:
-# - Core dependencies: PyPDF2, reportlab, tqdm
+# - Core dependencies: pypdf, reportlab, tqdm
 # - Web UI: streamlit
 # - Dev tools: pytest, black, flake8, mypy (optional)
 ```
@@ -142,7 +142,7 @@ docker run -p 8501:8501 bates-labeler
 ```
 
 ### Dependencies
-- **PyPDF2** ^3.0.1 - PDF manipulation
+- **pypdf** ^4.0.0 - PDF manipulation
 - **reportlab** ^4.0.7 - PDF generation  
 - **tqdm** ^4.66.1 - Progress bars
 - **streamlit** ^1.28.0 - Web interface (optional for CLI-only use)

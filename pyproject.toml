@@ -48,7 +48,7 @@ packages = [{include = "bates_labeler"}]
 
 [tool.poetry.dependencies]
 python = "^3.9,!=3.9.7"
-PyPDF2 = "^3.0.1"
+pypdf = "^4.0.0"
 reportlab = "^4.0.7"
 tqdm = "^4.66.1"
 streamlit = "^1.28.0"

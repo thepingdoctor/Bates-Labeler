@@ -11,7 +11,7 @@ Features:
     - Password-protected PDF handling
 
 Requirements:
-    pip install PyPDF2 reportlab tqdm
+    pip install pypdf reportlab tqdm
 
 Usage:
     python bates_stamp.py --input "evidence.pdf" --bates-prefix "SMITH-CASE-" --start-number 1
@@ -28,7 +28,7 @@ from typing import Tuple, Optional, List
 import getpass
 
 # PDF Libraries
-from PyPDF2 import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.units import inch

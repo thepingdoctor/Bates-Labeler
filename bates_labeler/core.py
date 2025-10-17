@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Tuple, Optional, List, Dict
 import getpass
 
-from PyPDF2 import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.units import inch
