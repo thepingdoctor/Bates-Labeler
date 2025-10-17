@@ -422,6 +422,107 @@ def main():
         
         st.divider()
         
+        # Output Options - Always visible
+        st.subheader("📑 Output Options")
+        
+        # Add Separator Page
+        add_separator = st.checkbox(
+            "Add Separator Page",
+            help="Add a page at the beginning showing Bates range"
+        )
+        
+        # Border settings for separator pages (nested option)
+        if add_separator:
+            st.markdown("##### Border Settings")
+            
+            enable_border = st.checkbox(
+                "Enable Border on Separator Page",
+                help="Add decorative border to separator page"
+            )
+            
+            if enable_border:
+                col1, col2 = st.columns(2)
+                with col1:
+                    border_style = st.selectbox(
+                        "Border Style",
+                        options=['solid', 'dashed', 'double', 'asterisks'],
+                        format_func=lambda x: x.capitalize(),
+                        help="Style of border"
+                    )
+                with col2:
+                    border_color = st.selectbox(
+                        "Border Color",
+                        options=['black', 'blue', 'red', 'green', 'gray'],
+                        help="Color of border"
+                    )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    border_width = st.slider(
+                        "Border Width",
+                        min_value=1.0,
+                        max_value=10.0,
+                        value=2.0,
+                        step=0.5,
+                        help="Width of border in points"
+                    )
+                with col2:
+                    if border_style in ['solid', 'dashed', 'double']:
+                        border_corner_radius = st.slider(
+                            "Corner Radius",
+                            min_value=0.0,
+                            max_value=20.0,
+                            value=0.0,
+                            step=1.0,
+                            help="Radius for rounded corners (0 for sharp corners)"
+                        )
+                    else:
+                        border_corner_radius = 0.0
+            else:
+                border_style = "solid"
+                border_color = "black"
+                border_width = 2.0
+                border_corner_radius = 0.0
+        else:
+            # Set defaults when separator page is not enabled
+            enable_border = False
+            border_style = "solid"
+            border_color = "black"
+            border_width = 2.0
+            border_corner_radius = 0.0
+        
+        # Combine PDFs option
+        combine_pdfs = st.checkbox(
+            "Combine All PDFs into Single File",
+            help="Merge all uploaded PDFs into one output file with continuous Bates numbering"
+        )
+        
+        if combine_pdfs:
+            add_document_separators = st.checkbox(
+                "Insert Separator Pages Between Documents",
+                value=True,
+                help="Add separator pages showing Bates range for each document"
+            )
+            add_index_page = st.checkbox(
+                "Generate Index Page",
+                value=False,
+                help="Add an index page at the beginning listing all documents with their Bates ranges"
+            )
+        else:
+            add_document_separators = False
+            add_index_page = False
+        
+        # Bates filename option
+        use_bates_filenames = st.checkbox(
+            "Use Bates Number as Filename",
+            help="Name output files with their first Bates number (e.g., CASE-0001.pdf)"
+        )
+        
+        if use_bates_filenames:
+            st.info("📊 Will generate CSV and PDF mapping files")
+        
+        st.divider()
+        
         # Position & Appearance - Collapsible
         with st.expander("🎨 Position & Appearance", expanded=True):
             position = st.selectbox(
@@ -667,105 +768,6 @@ def main():
                 )
             else:
                 background_padding = 3
-            
-            add_separator = st.checkbox(
-                "Add Separator Page",
-                help="Add a page at the beginning showing Bates range"
-            )
-            
-            # Border settings for separator pages (nested option)
-            if add_separator:
-                st.markdown("##### Border Settings")
-                
-                enable_border = st.checkbox(
-                    "Enable Border on Separator Page",
-                    help="Add decorative border to separator page"
-                )
-                
-                if enable_border:
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        border_style = st.selectbox(
-                            "Border Style",
-                            options=['solid', 'dashed', 'double', 'asterisks'],
-                            format_func=lambda x: x.capitalize(),
-                            help="Style of border"
-                        )
-                    with col2:
-                        border_color = st.selectbox(
-                            "Border Color",
-                            options=['black', 'blue', 'red', 'green', 'gray'],
-                            help="Color of border"
-                        )
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        border_width = st.slider(
-                            "Border Width",
-                            min_value=1.0,
-                            max_value=10.0,
-                            value=2.0,
-                            step=0.5,
-                            help="Width of border in points"
-                        )
-                    with col2:
-                        if border_style in ['solid', 'dashed', 'double']:
-                            border_corner_radius = st.slider(
-                                "Corner Radius",
-                                min_value=0.0,
-                                max_value=20.0,
-                                value=0.0,
-                                step=1.0,
-                                help="Radius for rounded corners (0 for sharp corners)"
-                            )
-                        else:
-                            border_corner_radius = 0.0
-                else:
-                    border_style = "solid"
-                    border_color = "black"
-                    border_width = 2.0
-                    border_corner_radius = 0.0
-            else:
-                # Set defaults when separator page is not enabled
-                enable_border = False
-                border_style = "solid"
-                border_color = "black"
-                border_width = 2.0
-                border_corner_radius = 0.0
-            
-            st.divider()
-            
-            # Combine PDFs option
-            combine_pdfs = st.checkbox(
-                "📑 Combine All PDFs into Single File",
-                help="Merge all uploaded PDFs into one output file with continuous Bates numbering"
-            )
-            
-            if combine_pdfs:
-                add_document_separators = st.checkbox(
-                    "Insert Separator Pages Between Documents",
-                    value=True,
-                    help="Add separator pages showing Bates range for each document"
-                )
-                add_index_page = st.checkbox(
-                    "Generate Index Page",
-                    value=False,
-                    help="Add an index page at the beginning listing all documents with their Bates ranges"
-                )
-            else:
-                add_document_separators = False
-                add_index_page = False
-            
-            st.divider()
-            
-            # Bates filename option
-            use_bates_filenames = st.checkbox(
-                "📝 Use Bates Number as Filename",
-                help="Name output files with their first Bates number (e.g., CASE-0001.pdf)"
-            )
-            
-            if use_bates_filenames:
-                st.info("📊 Will generate CSV and PDF mapping files")
     
     # Main content area
     col1, col2 = st.columns([2, 1])
