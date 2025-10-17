@@ -135,10 +135,33 @@ poetry.lock
 # macOS
 .DS_Store
 
-# Temporary PDF files
-temp_*.pdf
+# Temporary files (all types)
+temp_*
+
+# User uploads and custom assets
+uploads/
+uploaded_*
+logo_*
+custom_logo.*
+
+# Custom fonts (user-uploaded)
+*.ttf
+*.otf
+
+# Output files
 *_bates.pdf
+bates_mapping*.csv
+bates_mapping*.pdf
+combined_*.pdf
+*.zip
+output/
+bates_stamped/
+numbered_files/
 
 # Test PDFs
 test_*.pdf
 sample_*.pdf
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/cache/
