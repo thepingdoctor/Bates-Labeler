@@ -62,15 +62,21 @@ poetry run bates --input document.pdf --bates-prefix "CASE-"
 - ✅ Customizable prefix and suffix (e.g., "CASE123-0001-DRAFT")
 - ✅ Preserve original PDF attributes, bookmarks, and metadata
 - ✅ Support for password-protected PDFs
-- ✅ Batch processing of multiple PDFs
+- ✅ Batch processing of multiple PDFs with continuous numbering
 - ✅ Progress tracking for large documents
+- ✅ **Combine multiple PDFs** into single file with continuous Bates numbering
+- ✅ **Index page generation** - Professional document index for combined PDFs
+- ✅ **Bates number filenames** - Name output files by first Bates number with CSV/PDF mappings
+- ✅ **Custom fonts** - Support for TrueType (.ttf) and OpenType (.otf) fonts
 
 ### Customization Options
 - **Position**: Place Bates numbers at various positions on the page
-- **Font**: Customize font family, size, color, and style (bold/italic)
+- **Font**: Customize font family, size, color, and style (bold/italic) or upload custom fonts
 - **Date/Time**: Include optional timestamp with Bates numbers
 - **Padding**: Configure number padding (e.g., 4 digits: "0001")
 - **Formatting**: Full control over prefix/suffix format
+- **Separator Pages**: Add separator pages between documents showing Bates ranges
+- **Index Pages**: Generate professional table of contents for combined documents
 
 ## 📦 Installation
 
@@ -259,6 +265,17 @@ Available fonts: `Helvetica`, `Times-Roman`, `Courier`
 | `--include-date` | Include date stamp | `False` |
 | `--date-format` | Date format string | `%Y-%m-%d` |
 
+### Advanced Options
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--combine` | Combine all batch files into single PDF | `False` |
+| `--document-separators` | Add separator pages between documents (with `--combine`) | `False` |
+| `--add-index` | Generate index page listing all documents (with `--combine`) | `False` |
+| `--bates-filenames` | Use Bates number as output filename (e.g., CASE-0001.pdf) | `False` |
+| `--mapping-prefix` | Prefix for CSV/PDF mapping files | `bates_mapping` |
+| `--custom-font` | Path to custom TrueType (.ttf) or OpenType (.otf) font | None |
+| `--add-separator` | Add separator page at beginning showing Bates range | `False` |
+
 ### Security Options
 | Option | Description | Default |
 |--------|-------------|---------|
@@ -341,6 +358,39 @@ poetry run bates \
   --output-dir "./archived_bates/"
 ```
 
+### Combine Multiple PDFs with Index
+```bash
+poetry run bates \
+  --batch doc1.pdf doc2.pdf doc3.pdf \
+  --bates-prefix "CASE-" \
+  --combine \
+  --document-separators \
+  --add-index \
+  --output "combined_discovery.pdf"
+```
+
+### Use Bates Numbers as Filenames
+```bash
+poetry run bates \
+  --batch discovery/*.pdf \
+  --bates-prefix "PROD-" \
+  --start-number 1000 \
+  --bates-filenames \
+  --output-dir "./numbered_files/"
+# Creates: PROD-001000.pdf, PROD-001025.pdf, etc.
+# Also generates: bates_mapping.csv and bates_mapping.pdf
+```
+
+### Custom Font for Specialized Documents
+```bash
+poetry run bates \
+  --input "contract.pdf" \
+  --bates-prefix "CONTRACT-" \
+  --custom-font "/path/to/custom-font.ttf" \
+  --font-size 10 \
+  --position bottom-right
+```
+
 ## 📚 Documentation
 
 - **[WEB_UI_GUIDE.md](WEB_UI_GUIDE.md)** - Complete guide to the Streamlit web interface
@@ -420,11 +470,14 @@ Completed in v1.1.0:
 - [x] **Poetry packaging** - Modern Python dependency management
 - [x] **Docker support** - Container deployment option
 - [x] **Configuration presets** - Quick-start templates for common use cases
+- [x] **Custom TrueType/OpenType fonts** - Upload and use custom .ttf/.otf fonts in both UI and CLI
+- [x] **CSV/PDF mapping files** - Automatic generation when using Bates number filenames
+- [x] **PDF combining** - Merge multiple PDFs with continuous Bates numbering
+- [x] **Index page generation** - Professional document index for combined PDFs
+- [x] **Separator pages** - Optional pages between documents showing Bates ranges
 
 Planned for future versions:
-- [ ] Support for custom TrueType/OpenType fonts
 - [ ] QR code generation alongside Bates numbers
-- [ ] CSV/Excel logging of applied Bates numbers
 - [ ] Integration with document management systems
 - [ ] OCR support for scanned documents
 - [ ] Watermark capabilities
@@ -432,3 +485,5 @@ Planned for future versions:
 - [ ] Cloud storage integration (Google Drive, Dropbox, OneDrive)
 - [ ] Batch job scheduling and automation
 - [ ] PDF form field preservation
+- [ ] Advanced reporting and analytics
+- [ ] Template management system
