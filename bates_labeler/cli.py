@@ -91,6 +91,24 @@ Examples:
     parser.add_argument('--background-padding', type=int, default=3,
                        help='Padding around text background in pixels (default: 3)')
     
+    # Combine PDFs arguments
+    parser.add_argument('--combine', action='store_true',
+                       help='Combine all batch files into a single PDF with continuous Bates numbering')
+    parser.add_argument('--document-separators', action='store_true',
+                       help='Add separator pages between documents (only with --combine)')
+    parser.add_argument('--add-index', action='store_true',
+                       help='Add index page at the beginning listing all documents (only with --combine)')
+    
+    # Bates filename arguments
+    parser.add_argument('--bates-filenames', action='store_true',
+                       help='Use first Bates number as output filename (e.g., CASE-0001.pdf)')
+    parser.add_argument('--mapping-prefix', type=str, default='bates_mapping',
+                       help='Prefix for mapping files (default: bates_mapping)')
+    
+    # Custom font argument
+    parser.add_argument('--custom-font', type=str,
+                       help='Path to custom TrueType (.ttf) or OpenType (.otf) font file')
+    
     # Other arguments
     parser.add_argument('--password', type=str, help='Password for encrypted PDFs')
     
@@ -121,7 +139,8 @@ Examples:
         include_date=args.include_date,
         date_format=args.date_format,
         add_background=args.add_background,
-        background_padding=args.background_padding
+        background_padding=args.background_padding,
+        custom_font_path=args.custom_font
     )
     
     # Process based on mode
@@ -129,17 +148,157 @@ Examples:
         # Single file mode
         output_path = args.output
         if not output_path:
-            base_name = os.path.splitext(os.path.basename(args.input))[0]
-            output_path = f"{base_name}_bates.pdf"
-        
-        success = bates_numberer.process_pdf(args.input, output_path, args.password, 
-                                            add_separator=args.add_separator)
-        sys.exit(0 if success else 1)
+            if args.bates_filenames:
+                # Need to process to get first Bates number
+                metadata = bates_numberer.process_pdf(
+                    args.input, 
+                    "temp_output.pdf",
+                    args.password,
+                    add_separator=args.add_separator,
+                    return_metadata=True
+                )
+                if metadata['success']:
+                    output_path = f"{metadata['first_bates']}.pdf"
+                    os.rename("temp_output.pdf", output_path)
+                    
+                    # Generate mapping files
+                    if args.bates_filenames:
+                        mappings = [{
+                            'original_filename': os.path.basename(args.input),
+                            'new_filename': output_path,
+                            'first_bates': metadata['first_bates'],
+                            'last_bates': metadata['last_bates'],
+                            'page_count': metadata['page_count']
+                        }]
+                        bates_numberer.generate_filename_mapping_csv(
+                            mappings, f"{args.mapping_prefix}.csv"
+                        )
+                        bates_numberer.generate_filename_mapping_pdf(
+                            mappings, f"{args.mapping_prefix}.pdf"
+                        )
+                    sys.exit(0)
+                else:
+                    sys.exit(1)
+            else:
+                base_name = os.path.splitext(os.path.basename(args.input))[0]
+                output_path = f"{base_name}_bates.pdf"
+                success = bates_numberer.process_pdf(
+                    args.input, output_path, args.password,
+                    add_separator=args.add_separator
+                )
+                sys.exit(0 if success else 1)
+        else:
+            success = bates_numberer.process_pdf(
+                args.input, output_path, args.password,
+                add_separator=args.add_separator
+            )
+            sys.exit(0 if success else 1)
     
     else:
         # Batch mode
-        bates_numberer.process_batch(args.batch, args.output_dir, 
-                                   add_separator=args.add_separator)
+        if args.combine:
+            # Combine all PDFs into single file
+            output_path = args.output if args.output else "combined_bates.pdf"
+            if args.output_dir:
+                output_path = os.path.join(args.output_dir, os.path.basename(output_path))
+            
+            result = bates_numberer.combine_and_process_pdfs(
+                args.batch,
+                output_path,
+                add_document_separators=args.document_separators,
+                add_index_page=args.add_index,
+                password=args.password
+            )
+            
+            if result['success']:
+                # Optionally rename with Bates range
+                if args.bates_filenames and result['documents']:
+                    first_bates = result['documents'][0]['first_bates']
+                    last_bates = result['documents'][-1]['last_bates']
+                    new_output_path = f"{first_bates}_to_{last_bates}.pdf"
+                    if args.output_dir:
+                        new_output_path = os.path.join(args.output_dir, new_output_path)
+                    os.rename(output_path, new_output_path)
+                    output_path = new_output_path
+                    
+                    # Generate mapping files
+                    bates_numberer.generate_filename_mapping_csv(
+                        result['documents'], f"{args.mapping_prefix}.csv"
+                    )
+                    bates_numberer.generate_filename_mapping_pdf(
+                        result['documents'], f"{args.mapping_prefix}.pdf"
+                    )
+                
+                print(f"\nCombined PDF saved to: {output_path}")
+                sys.exit(0)
+            else:
+                sys.exit(1)
+        
+        elif args.bates_filenames:
+            # Process with Bates number filenames
+            successful = 0
+            failed = 0
+            mappings = []
+            
+            for input_path in args.batch:
+                if not os.path.exists(input_path):
+                    print(f"Warning: File not found: {input_path}")
+                    failed += 1
+                    continue
+                
+                # Process with metadata
+                metadata = bates_numberer.process_pdf(
+                    input_path,
+                    "temp_output.pdf",
+                    args.password,
+                    add_separator=args.add_separator,
+                    return_metadata=True
+                )
+                
+                if metadata['success']:
+                    # Generate new filename
+                    output_name = f"{metadata['first_bates']}.pdf"
+                    if args.output_dir:
+                        output_path = os.path.join(args.output_dir, output_name)
+                    else:
+                        output_path = output_name
+                    
+                    os.rename("temp_output.pdf", output_path)
+                    
+                    # Track mapping
+                    mappings.append({
+                        'original_filename': os.path.basename(input_path),
+                        'new_filename': output_name,
+                        'first_bates': metadata['first_bates'],
+                        'last_bates': metadata['last_bates'],
+                        'page_count': metadata['page_count']
+                    })
+                    
+                    successful += 1
+                else:
+                    failed += 1
+            
+            # Generate mapping files
+            if mappings:
+                mapping_csv = f"{args.mapping_prefix}.csv"
+                mapping_pdf = f"{args.mapping_prefix}.pdf"
+                if args.output_dir:
+                    mapping_csv = os.path.join(args.output_dir, os.path.basename(mapping_csv))
+                    mapping_pdf = os.path.join(args.output_dir, os.path.basename(mapping_pdf))
+                
+                bates_numberer.generate_filename_mapping_csv(mappings, mapping_csv)
+                bates_numberer.generate_filename_mapping_pdf(mappings, mapping_pdf)
+            
+            print(f"\nBatch processing complete: {successful} successful, {failed} failed")
+            print(f"Mapping files saved: {mapping_csv}, {mapping_pdf}")
+            sys.exit(0 if failed == 0 else 1)
+        
+        else:
+            # Standard batch processing
+            bates_numberer.process_batch(
+                args.batch, args.output_dir,
+                add_separator=args.add_separator
+            )
 
 
 if __name__ == "__main__":

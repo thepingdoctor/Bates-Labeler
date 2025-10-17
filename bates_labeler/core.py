@@ -1,14 +1,20 @@
 """Core Bates numbering functionality."""
 
 import os
+import csv
 from datetime import datetime
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 import getpass
 
 from PyPDF2 import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from tqdm import tqdm
 
 
@@ -41,7 +47,8 @@ class BatesNumberer:
                  include_date: bool = False,
                  date_format: str = "%Y-%m-%d",
                  add_background: bool = True,
-                 background_padding: int = 3):
+                 background_padding: int = 3,
+                 custom_font_path: Optional[str] = None):
         """
         Initialize Bates numbering configuration.
         
@@ -51,22 +58,32 @@ class BatesNumberer:
             padding: Number of digits for padding (e.g., 4 -> "0001")
             suffix: Suffix for Bates number
             position: Position on page (top-left, bottom-right, etc.)
-            font_name: Font family name
+            font_name: Font family name (or custom font name if using custom font)
             font_size: Font size in points
             font_color: Font color name or hex
-            bold: Use bold font
-            italic: Use italic font
+            bold: Use bold font (ignored if using custom font)
+            italic: Use italic font (ignored if using custom font)
             include_date: Include date/time stamp
             date_format: Format for date stamp
             add_background: Add white background behind text
             background_padding: Padding around text background in pixels
+            custom_font_path: Path to custom TrueType (.ttf) or OpenType (.otf) font file
         """
         self.prefix = prefix
         self.current_number = start_number
         self.padding = padding
         self.suffix = suffix
         self.position = position
-        self.font_name = self._get_font_name(font_name, bold, italic)
+        self.custom_font_path = custom_font_path
+        self.custom_font_name = None
+        
+        # Register custom font if provided
+        if custom_font_path:
+            self.custom_font_name = self._register_custom_font(custom_font_path)
+            self.font_name = self.custom_font_name if self.custom_font_name else self._get_font_name(font_name, bold, italic)
+        else:
+            self.font_name = self._get_font_name(font_name, bold, italic)
+        
         self.font_size = font_size
         self.font_color = self._parse_color(font_color)
         self.include_date = include_date
@@ -123,6 +140,42 @@ class BatesNumberer:
         
         return colors.black
     
+    def _register_custom_font(self, font_path: str) -> Optional[str]:
+        """
+        Register a custom TrueType or OpenType font with reportlab.
+        
+        Args:
+            font_path: Path to the .ttf or .otf font file
+            
+        Returns:
+            Registered font name if successful, None otherwise
+        """
+        try:
+            # Check if file exists
+            if not os.path.exists(font_path):
+                print(f"Warning: Custom font file not found: {font_path}")
+                return None
+            
+            # Validate file extension
+            file_ext = os.path.splitext(font_path)[1].lower()
+            if file_ext not in ['.ttf', '.otf']:
+                print(f"Warning: Unsupported font format '{file_ext}'. Only .ttf and .otf files are supported.")
+                return None
+            
+            # Generate a unique font name from the file
+            font_name = f"CustomFont_{os.path.splitext(os.path.basename(font_path))[0]}"
+            
+            # Register the font
+            pdfmetrics.registerFont(TTFont(font_name, font_path))
+            
+            print(f"Successfully registered custom font: {font_name}")
+            return font_name
+            
+        except Exception as e:
+            print(f"Error registering custom font: {str(e)}")
+            print("Falling back to default font...")
+            return None
+    
     def get_next_bates_number(self) -> str:
         """Generate the next Bates number in sequence."""
         # Format the number with padding
@@ -135,7 +188,8 @@ class BatesNumberer:
         return bates_number
     
     def create_separator_page(self, page_width: float, page_height: float,
-                            first_bates: str, last_bates: str, output_path: str) -> None:
+                            first_bates: str, last_bates: str, output_path: str,
+                            document_name: Optional[str] = None) -> None:
         """
         Create a separator page with Bates range information.
         
@@ -145,6 +199,7 @@ class BatesNumberer:
             first_bates: First Bates number in the document
             last_bates: Last Bates number in the document
             output_path: Path to save the separator page PDF
+            document_name: Optional document name (kept for backward compatibility but not displayed)
         """
         c = canvas.Canvas(output_path, pagesize=(page_width, page_height))
         
@@ -163,6 +218,79 @@ class BatesNumberer:
         c.drawCentredString(center_x, center_y - 30, range_text)
         
         c.save()
+    
+    def create_index_page(self, documents: List[Dict], output_path: str,
+                         page_width: float = 612, page_height: float = 792) -> None:
+        """
+        Create an index page listing all documents with their Bates ranges.
+        
+        Args:
+            documents: List of dicts with original_filename, first_bates, last_bates, page_count
+            output_path: Path to save the index page PDF
+            page_width: Page width in points (default: letter size)
+            page_height: Page height in points (default: letter size)
+        """
+        try:
+            doc = SimpleDocTemplate(output_path, pagesize=(page_width, page_height))
+            elements = []
+            styles = getSampleStyleSheet()
+            
+            # Title
+            title = Paragraph("<b>BATES NUMBERING INDEX</b>", styles['Title'])
+            elements.append(title)
+            elements.append(Spacer(1, 30))
+            
+            # Table header
+            table_data = [['Document Name', 'First Bates', 'Last Bates', 'Pages']]
+            
+            # Add document rows
+            for doc_info in documents:
+                table_data.append([
+                    doc_info.get('original_filename', ''),
+                    doc_info.get('first_bates', ''),
+                    doc_info.get('last_bates', ''),
+                    str(doc_info.get('page_count', 0))
+                ])
+            
+            # Create table with appropriate column widths
+            table = Table(table_data, colWidths=[240, 120, 120, 60])
+            table.setStyle(TableStyle([
+                # Header row styling
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('TOPPADDING', (0, 0), (-1, 0), 12),
+                
+                # Data rows styling
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                ('ALIGN', (0, 1), (0, -1), 'LEFT'),  # Left align document names
+                ('ALIGN', (1, 1), (-1, -1), 'CENTER'),  # Center align other columns
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('TOPPADDING', (0, 1), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+                
+                # Grid and borders
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('LINEBELOW', (0, 0), (-1, 0), 2, colors.black),
+                
+                # Alternating row colors for better readability
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f2f6')])
+            ]))
+            
+            elements.append(table)
+            
+            # Build PDF
+            doc.build(elements)
+            
+            print(f"Index page saved to: {output_path}")
+            
+        except Exception as e:
+            print(f"Error creating index page: {str(e)}")
     
     def create_bates_overlay(self, page_width: float, page_height: float, 
                            bates_number: str, output_path: str) -> None:
@@ -244,7 +372,8 @@ class BatesNumberer:
     
     def process_pdf(self, input_path: str, output_path: str, 
                    password: Optional[str] = None,
-                   add_separator: bool = False) -> bool:
+                   add_separator: bool = False,
+                   return_metadata: bool = False) -> Dict:
         """
         Process a PDF file and add Bates numbers.
         
@@ -253,10 +382,19 @@ class BatesNumberer:
             output_path: Path to save output PDF
             password: Password for encrypted PDFs
             add_separator: Add separator page at the beginning
+            return_metadata: If True, return metadata dict instead of bool
             
         Returns:
-            True if successful, False otherwise
+            If return_metadata is True: dict with success, first_bates, last_bates, page_count
+            Otherwise: bool indicating success
         """
+        metadata = {
+            'success': False,
+            'first_bates': None,
+            'last_bates': None,
+            'page_count': 0,
+            'original_filename': os.path.basename(input_path)
+        }
         try:
             # Read the input PDF
             print(f"Reading PDF: {input_path}")
@@ -279,11 +417,16 @@ class BatesNumberer:
             
             # Get total pages for progress bar
             total_pages = len(reader.pages)
+            metadata['page_count'] = total_pages
             print(f"Processing {total_pages} pages...")
             
-            # Calculate the first and last Bates numbers if separator is needed
-            first_bates_number = None
-            last_bates_number = None
+            # Track first and last Bates numbers
+            first_bates_number = f"{self.prefix}{str(self.current_number).zfill(self.padding)}{self.suffix}"
+            last_number = self.current_number + total_pages - 1
+            last_bates_number = f"{self.prefix}{str(last_number).zfill(self.padding)}{self.suffix}"
+            
+            metadata['first_bates'] = first_bates_number
+            metadata['last_bates'] = last_bates_number
             
             if add_separator:
                 # Calculate Bates range
@@ -348,11 +491,13 @@ class BatesNumberer:
             
             pages_processed = total_pages + (1 if add_separator else 0)
             print(f"Successfully processed {pages_processed} pages")
-            return True
+            metadata['success'] = True
+            
+            return metadata if return_metadata else True
             
         except Exception as e:
             print(f"Error processing PDF: {str(e)}")
-            return False
+            return metadata if return_metadata else False
     
     def process_batch(self, input_files: List[str], output_dir: str = None,
                      add_separator: bool = False) -> None:
@@ -389,3 +534,247 @@ class BatesNumberer:
                 failed += 1
         
         print(f"\nBatch processing complete: {successful} successful, {failed} failed")
+    
+    def combine_and_process_pdfs(self, input_files: List[str], output_path: str,
+                                 add_document_separators: bool = False,
+                                 add_index_page: bool = False,
+                                 password: Optional[str] = None) -> Dict:
+        """
+        Combine multiple PDFs and add Bates numbers to the combined document.
+        
+        Args:
+            input_files: List of input PDF file paths
+            output_path: Path for the combined output PDF
+            add_document_separators: Add separator pages between documents
+            add_index_page: Add index page at the beginning listing all documents
+            password: Password for encrypted PDFs
+            
+        Returns:
+            Dict with success status and document metadata list
+        """
+        result = {
+            'success': False,
+            'documents': [],
+            'combined_file': output_path,
+            'total_pages': 0
+        }
+        
+        try:
+            writer = PdfWriter()
+            all_documents = []
+            total_pages = 0
+            
+            print(f"Combining {len(input_files)} PDF files...")
+            
+            for file_idx, input_path in enumerate(input_files, 1):
+                if not os.path.exists(input_path):
+                    print(f"Warning: File not found: {input_path}")
+                    continue
+                
+                print(f"Processing file {file_idx}/{len(input_files)}: {os.path.basename(input_path)}")
+                reader = PdfReader(input_path)
+                
+                # Handle encryption
+                if reader.is_encrypted:
+                    if password:
+                        if not reader.decrypt(password):
+                            print(f"Error: Invalid password for {input_path}")
+                            continue
+                    else:
+                        print(f"Warning: Skipping encrypted file {input_path}")
+                        continue
+                
+                num_pages = len(reader.pages)
+                first_bates = f"{self.prefix}{str(self.current_number).zfill(self.padding)}{self.suffix}"
+                last_number = self.current_number + num_pages - 1
+                last_bates = f"{self.prefix}{str(last_number).zfill(self.padding)}{self.suffix}"
+                
+                # Add document separator if requested
+                if add_document_separators and num_pages > 0:
+                    first_page = reader.pages[0]
+                    page_width = float(first_page.mediabox.width)
+                    page_height = float(first_page.mediabox.height)
+                    
+                    separator_path = f"temp_doc_separator_{file_idx}.pdf"
+                    self.create_separator_page(
+                        page_width, page_height,
+                        first_bates, last_bates,
+                        separator_path,
+                        document_name=os.path.basename(input_path)
+                    )
+                    
+                    separator_reader = PdfReader(separator_path)
+                    writer.add_page(separator_reader.pages[0])
+                    os.remove(separator_path)
+                
+                # Process each page
+                for page in reader.pages:
+                    page_width = float(page.mediabox.width)
+                    page_height = float(page.mediabox.height)
+                    
+                    bates_number = self.get_next_bates_number()
+                    
+                    overlay_path = f"temp_combine_overlay_{total_pages}.pdf"
+                    self.create_bates_overlay(page_width, page_height, bates_number, overlay_path)
+                    
+                    overlay_reader = PdfReader(overlay_path)
+                    overlay_page = overlay_reader.pages[0]
+                    
+                    page.merge_page(overlay_page)
+                    writer.add_page(page)
+                    os.remove(overlay_path)
+                    
+                    total_pages += 1
+                
+                # Track document metadata
+                doc_info = {
+                    'original_filename': os.path.basename(input_path),
+                    'first_bates': first_bates,
+                    'last_bates': last_bates,
+                    'page_count': num_pages
+                }
+                all_documents.append(doc_info)
+            
+            # Add index page at the beginning if requested
+            if add_index_page and all_documents:
+                print("Creating index page...")
+                index_path = "temp_index.pdf"
+                # Use letter size for index page
+                self.create_index_page(all_documents, index_path)
+                
+                # Read index page
+                index_reader = PdfReader(index_path)
+                
+                # Create a new writer with index page first
+                new_writer = PdfWriter()
+                
+                # Add index page
+                for page in index_reader.pages:
+                    new_writer.add_page(page)
+                
+                # Add all existing pages from the original writer
+                for page_num in range(len(writer.pages)):
+                    new_writer.add_page(writer.pages[page_num])
+                
+                # Replace writer with new_writer
+                writer = new_writer
+                
+                # Clean up temp file
+                os.remove(index_path)
+            
+            # Write combined output
+            print(f"Writing combined PDF to: {output_path}")
+            with open(output_path, 'wb') as output_file:
+                writer.write(output_file)
+            
+            result['success'] = True
+            result['documents'] = all_documents
+            result['total_pages'] = total_pages
+            
+            print(f"Successfully combined {len(all_documents)} documents ({total_pages} pages)")
+            return result
+            
+        except Exception as e:
+            print(f"Error combining PDFs: {str(e)}")
+            return result
+    
+    def generate_filename_mapping_csv(self, mappings: List[Dict], output_path: str) -> bool:
+        """
+        Generate a CSV file mapping original filenames to Bates-numbered filenames.
+        
+        Args:
+            mappings: List of dicts with original_filename, new_filename, first_bates, last_bates, page_count
+            output_path: Path for the output CSV file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+                fieldnames = ['Original Filename', 'New Filename', 'First Bates', 'Last Bates', 'Page Count']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                
+                writer.writeheader()
+                for mapping in mappings:
+                    writer.writerow({
+                        'Original Filename': mapping.get('original_filename', ''),
+                        'New Filename': mapping.get('new_filename', ''),
+                        'First Bates': mapping.get('first_bates', ''),
+                        'Last Bates': mapping.get('last_bates', ''),
+                        'Page Count': mapping.get('page_count', 0)
+                    })
+            
+            print(f"CSV mapping saved to: {output_path}")
+            return True
+            
+        except Exception as e:
+            print(f"Error generating CSV mapping: {str(e)}")
+            return False
+    
+    def generate_filename_mapping_pdf(self, mappings: List[Dict], output_path: str) -> bool:
+        """
+        Generate a PDF document showing filename mappings.
+        
+        Args:
+            mappings: List of dicts with original_filename, new_filename, first_bates, last_bates, page_count
+            output_path: Path for the output PDF file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            doc = SimpleDocTemplate(output_path, pagesize=letter)
+            elements = []
+            styles = getSampleStyleSheet()
+            
+            # Title
+            title = Paragraph("<b>Bates Numbering Filename Mapping</b>", styles['Title'])
+            elements.append(title)
+            elements.append(Spacer(1, 20))
+            
+            # Timestamp
+            timestamp = Paragraph(
+                f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                styles['Normal']
+            )
+            elements.append(timestamp)
+            elements.append(Spacer(1, 20))
+            
+            # Table data
+            table_data = [['Original Filename', 'New Filename', 'First Bates', 'Last Bates', 'Pages']]
+            
+            for mapping in mappings:
+                table_data.append([
+                    mapping.get('original_filename', ''),
+                    mapping.get('new_filename', ''),
+                    mapping.get('first_bates', ''),
+                    mapping.get('last_bates', ''),
+                    str(mapping.get('page_count', 0))
+                ])
+            
+            # Create table
+            table = Table(table_data, colWidths=[120, 120, 90, 90, 50])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ]))
+            
+            elements.append(table)
+            
+            # Build PDF
+            doc.build(elements)
+            
+            print(f"PDF mapping saved to: {output_path}")
+            return True
+            
+        except Exception as e:
+            print(f"Error generating PDF mapping: {str(e)}")
+            return False

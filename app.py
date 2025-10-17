@@ -146,7 +146,7 @@ def generate_preview(prefix: str, start_number: int, padding: int, suffix: str) 
     return f"{prefix}{number_str}{suffix}"
 
 
-def process_pdf(uploaded_file, config: dict, add_separator: bool = False) -> Optional[bytes]:
+def process_pdf(uploaded_file, config: dict, add_separator: bool = False, return_metadata: bool = False, numberer=None):
     """Process a single PDF file with Bates numbering."""
     try:
         # Create temporary files
@@ -157,36 +157,175 @@ def process_pdf(uploaded_file, config: dict, add_separator: bool = False) -> Opt
         with tempfile.NamedTemporaryFile(delete=False, suffix='_bates.pdf') as tmp_output:
             tmp_output_path = tmp_output.name
         
-        # Create BatesNumberer instance
-        numberer = BatesNumberer(**config)
+        # Create BatesNumberer instance if not provided
+        if numberer is None:
+            numberer = BatesNumberer(**config)
         
         # Process the PDF
-        success = numberer.process_pdf(
+        result = numberer.process_pdf(
             tmp_input_path,
             tmp_output_path,
-            add_separator=add_separator
+            add_separator=add_separator,
+            return_metadata=return_metadata
         )
         
-        if success:
-            # Read the processed file
-            with open(tmp_output_path, 'rb') as f:
-                output_data = f.read()
-            
-            # Clean up temporary files
-            os.unlink(tmp_input_path)
-            os.unlink(tmp_output_path)
-            
-            return output_data
-        else:
-            # Clean up temporary files
-            os.unlink(tmp_input_path)
-            if os.path.exists(tmp_output_path):
+        if return_metadata:
+            if result['success']:
+                # Read the processed file
+                with open(tmp_output_path, 'rb') as f:
+                    output_data = f.read()
+                
+                # Clean up temporary files
+                os.unlink(tmp_input_path)
                 os.unlink(tmp_output_path)
-            return None
+                
+                result['data'] = output_data
+                return result
+            else:
+                # Clean up temporary files
+                os.unlink(tmp_input_path)
+                if os.path.exists(tmp_output_path):
+                    os.unlink(tmp_output_path)
+                return result
+        else:
+            # Original behavior for backwards compatibility
+            if result:
+                # Read the processed file
+                with open(tmp_output_path, 'rb') as f:
+                    output_data = f.read()
+                
+                # Clean up temporary files
+                os.unlink(tmp_input_path)
+                os.unlink(tmp_output_path)
+                
+                return output_data
+            else:
+                # Clean up temporary files
+                os.unlink(tmp_input_path)
+                if os.path.exists(tmp_output_path):
+                    os.unlink(tmp_output_path)
+                return None
             
     except Exception as e:
         st.error(f"Error processing PDF: {str(e)}")
-        return None
+        return None if not return_metadata else {'success': False, 'data': None}
+
+
+def process_combined_pdfs(uploaded_files, config: dict, add_document_separators: bool = False, add_index_page: bool = False):
+    """Process and combine multiple PDFs into a single file."""
+    try:
+        # Create temporary input files
+        temp_files = []
+        for uploaded_file in uploaded_files:
+            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+            tmp_file.write(uploaded_file.read())
+            tmp_file.close()
+            temp_files.append(tmp_file.name)
+        
+        # Create temporary output file
+        tmp_output = tempfile.NamedTemporaryFile(delete=False, suffix='_combined_bates.pdf')
+        tmp_output_path = tmp_output.name
+        tmp_output.close()
+        
+        # Create BatesNumberer instance
+        numberer = BatesNumberer(**config)
+        
+        # Combine and process PDFs
+        result = numberer.combine_and_process_pdfs(
+            temp_files,
+            tmp_output_path,
+            add_document_separators=add_document_separators,
+            add_index_page=add_index_page
+        )
+        
+        # Clean up temporary input files
+        for temp_file in temp_files:
+            os.unlink(temp_file)
+        
+        if result['success']:
+            # Read the combined file
+            with open(tmp_output_path, 'rb') as f:
+                output_data = f.read()
+            
+            # Clean up temporary output file
+            os.unlink(tmp_output_path)
+            
+            result['data'] = output_data
+            return result
+        else:
+            # Clean up temporary output file
+            if os.path.exists(tmp_output_path):
+                os.unlink(tmp_output_path)
+            return result
+            
+    except Exception as e:
+        st.error(f"Error combining PDFs: {str(e)}")
+        return {'success': False, 'data': None}
+
+
+def process_with_bates_filenames(uploaded_files, config: dict, add_separator: bool = False):
+    """Process multiple PDFs with Bates number filenames and generate mappings."""
+    try:
+        processed_files = []
+        mappings = []
+        
+        # Create a single BatesNumberer instance to maintain continuous numbering
+        numberer = BatesNumberer(**config)
+        
+        for uploaded_file in uploaded_files:
+            # Process with metadata, passing the shared numberer instance
+            result = process_pdf(uploaded_file, config, add_separator, return_metadata=True, numberer=numberer)
+            
+            if result and result['success']:
+                # Generate new filename from first Bates number
+                new_filename = f"{result['first_bates']}.pdf"
+                
+                processed_files.append({
+                    'name': new_filename,
+                    'data': result['data']
+                })
+                
+                mappings.append({
+                    'original_filename': uploaded_file.name,
+                    'new_filename': new_filename,
+                    'first_bates': result['first_bates'],
+                    'last_bates': result['last_bates'],
+                    'page_count': result['page_count']
+                })
+        
+        # Generate mapping files
+        csv_data = None
+        pdf_data = None
+        
+        if mappings:
+            # Reuse the same numberer instance for mapping generation
+            
+            # Generate CSV mapping
+            csv_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+            csv_tmp.close()
+            if numberer.generate_filename_mapping_csv(mappings, csv_tmp.name):
+                with open(csv_tmp.name, 'rb') as f:
+                    csv_data = f.read()
+            os.unlink(csv_tmp.name)
+            
+            # Generate PDF mapping
+            pdf_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+            pdf_tmp.close()
+            if numberer.generate_filename_mapping_pdf(mappings, pdf_tmp.name):
+                with open(pdf_tmp.name, 'rb') as f:
+                    pdf_data = f.read()
+            os.unlink(pdf_tmp.name)
+        
+        return {
+            'success': len(processed_files) > 0,
+            'files': processed_files,
+            'csv_mapping': csv_data,
+            'pdf_mapping': pdf_data
+        }
+        
+    except Exception as e:
+        st.error(f"Error processing with Bates filenames: {str(e)}")
+        return {'success': False, 'files': [], 'csv_mapping': None, 'pdf_mapping': None}
 
 
 def main():
@@ -264,11 +403,22 @@ def main():
                 help="Where to place the Bates number on the page"
             )
             
-            font_name = st.selectbox(
-                "Font",
-                options=['Helvetica', 'Times-Roman', 'Courier'],
-                help="Font family for Bates numbers"
+            # Custom font upload
+            custom_font = st.file_uploader(
+                "Upload Custom Font (optional)",
+                type=['ttf', 'otf'],
+                help="Upload a TrueType (.ttf) or OpenType (.otf) font file. If uploaded, this will override the font selection below."
             )
+            
+            if custom_font:
+                st.info(f"✅ Custom font loaded: {custom_font.name}")
+                font_name = "Helvetica"  # Default for config, will be overridden
+            else:
+                font_name = st.selectbox(
+                    "Font",
+                    options=['Helvetica', 'Times-Roman', 'Courier'],
+                    help="Font family for Bates numbers"
+                )
             
             font_size = st.slider(
                 "Font Size",
@@ -327,6 +477,40 @@ def main():
                 "Add Separator Page",
                 help="Add a page at the beginning showing Bates range"
             )
+            
+            st.divider()
+            
+            # Combine PDFs option
+            combine_pdfs = st.checkbox(
+                "📑 Combine All PDFs into Single File",
+                help="Merge all uploaded PDFs into one output file with continuous Bates numbering"
+            )
+            
+            if combine_pdfs:
+                add_document_separators = st.checkbox(
+                    "Insert Separator Pages Between Documents",
+                    value=True,
+                    help="Add separator pages showing Bates range for each document"
+                )
+                add_index_page = st.checkbox(
+                    "Generate Index Page",
+                    value=False,
+                    help="Add an index page at the beginning listing all documents with their Bates ranges"
+                )
+            else:
+                add_document_separators = False
+                add_index_page = False
+            
+            st.divider()
+            
+            # Bates filename option
+            use_bates_filenames = st.checkbox(
+                "📝 Use Bates Number as Filename",
+                help="Name output files with their first Bates number (e.g., CASE-0001.pdf)"
+            )
+            
+            if use_bates_filenames:
+                st.info("📊 Will generate CSV and PDF mapping files")
     
     # Main content area
     col1, col2 = st.columns([2, 1])
@@ -380,6 +564,14 @@ def main():
     # Process button
     if uploaded_files:
         if st.button("🚀 Process PDF(s)", type="primary", use_container_width=True):
+            # Handle custom font if uploaded
+            custom_font_path = None
+            if custom_font:
+                # Save custom font to temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(custom_font.name)[1]) as tmp_font:
+                    tmp_font.write(custom_font.read())
+                    custom_font_path = tmp_font.name
+            
             # Build configuration for BatesNumberer (constructor parameters only)
             numberer_config = {
                 'prefix': prefix,
@@ -395,29 +587,105 @@ def main():
                 'include_date': include_date,
                 'date_format': date_format,
                 'add_background': add_background,
-                'background_padding': background_padding
+                'background_padding': background_padding,
+                'custom_font_path': custom_font_path
             }
             
-            # Process files
+            # Process files based on selected options
             progress_bar = st.progress(0)
             status_text = st.empty()
             
             st.session_state.processed_files = []
             
-            for i, uploaded_file in enumerate(uploaded_files):
-                status_text.text(f"Processing {uploaded_file.name}...")
+            # Option 1: Combine PDFs
+            if combine_pdfs:
+                status_text.text("Combining and processing PDFs...")
+                result = process_combined_pdfs(uploaded_files, numberer_config, add_document_separators, add_index_page)
                 
-                # Process the file (pass add_separator separately)
-                output_data = process_pdf(uploaded_file, numberer_config, add_separator)
+                if result['success']:
+                    # Generate combined filename
+                    if result['documents']:
+                        first_bates = result['documents'][0]['first_bates']
+                        last_bates = result['documents'][-1]['last_bates']
+                        
+                        if use_bates_filenames:
+                            combined_filename = f"{first_bates}_to_{last_bates}.pdf"
+                        else:
+                            combined_filename = "combined_bates.pdf"
+                        
+                        st.session_state.processed_files.append({
+                            'name': combined_filename,
+                            'data': result['data']
+                        })
+                        
+                        # Generate mappings if Bates filenames is enabled
+                        if use_bates_filenames:
+                            numberer = BatesNumberer(**numberer_config)
+                            
+                            # Generate CSV mapping
+                            csv_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+                            csv_tmp.close()
+                            if numberer.generate_filename_mapping_csv(result['documents'], csv_tmp.name):
+                                with open(csv_tmp.name, 'rb') as f:
+                                    st.session_state.processed_files.append({
+                                        'name': 'bates_mapping.csv',
+                                        'data': f.read()
+                                    })
+                            os.unlink(csv_tmp.name)
+                            
+                            # Generate PDF mapping
+                            pdf_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+                            pdf_tmp.close()
+                            if numberer.generate_filename_mapping_pdf(result['documents'], pdf_tmp.name):
+                                with open(pdf_tmp.name, 'rb') as f:
+                                    st.session_state.processed_files.append({
+                                        'name': 'bates_mapping.pdf',
+                                        'data': f.read()
+                                    })
+                            os.unlink(pdf_tmp.name)
                 
-                if output_data:
-                    st.session_state.processed_files.append({
-                        'name': uploaded_file.name.replace('.pdf', '_bates.pdf'),
-                        'data': output_data
-                    })
+                progress_bar.progress(1.0)
+            
+            # Option 2: Bates filenames (without combine)
+            elif use_bates_filenames:
+                status_text.text("Processing with Bates number filenames...")
+                result = process_with_bates_filenames(uploaded_files, numberer_config, add_separator)
                 
-                # Update progress
-                progress_bar.progress((i + 1) / len(uploaded_files))
+                if result['success']:
+                    # Add processed files
+                    st.session_state.processed_files.extend(result['files'])
+                    
+                    # Add mapping files
+                    if result['csv_mapping']:
+                        st.session_state.processed_files.append({
+                            'name': 'bates_mapping.csv',
+                            'data': result['csv_mapping']
+                        })
+                    
+                    if result['pdf_mapping']:
+                        st.session_state.processed_files.append({
+                            'name': 'bates_mapping.pdf',
+                            'data': result['pdf_mapping']
+                        })
+                
+                progress_bar.progress(1.0)
+            
+            # Option 3: Standard processing (original behavior)
+            else:
+                for i, uploaded_file in enumerate(uploaded_files):
+                    status_text.text(f"Processing {uploaded_file.name}...")
+                    
+                    # Process the file
+                    output_data = process_pdf(uploaded_file, numberer_config, add_separator)
+                    
+                    if output_data:
+                        st.session_state.processed_files.append({
+                            'name': uploaded_file.name.replace('.pdf', '_bates.pdf'),
+                            'data': output_data
+                        })
+                    
+                    # Update progress
+                    progress_bar.progress((i + 1) / len(uploaded_files))
             
             status_text.empty()
             progress_bar.empty()
@@ -439,12 +707,16 @@ def main():
         
         for i, processed_file in enumerate(st.session_state.processed_files):
             with [col1, col2, col3][i % 3]:
+                # Determine MIME type based on file extension
+                mime_type = 'text/csv' if processed_file['name'].endswith('.csv') else 'application/pdf'
+                
                 st.download_button(
                     label=f"⬇️ {processed_file['name']}",
                     data=processed_file['data'],
                     file_name=processed_file['name'],
-                    mime='application/pdf',
-                    use_container_width=True
+                    mime=mime_type,
+                    use_container_width=True,
+                    key=f"download_btn_{i}_{processed_file['name']}"
                 )
         
         if st.button("🗑️ Clear Processed Files", use_container_width=True):
