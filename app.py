@@ -564,53 +564,6 @@ def main():
                 qr_color = "black"
                 qr_background_color = "white"
         
-        # Border Settings - Collapsible
-        with st.expander("🔲 Border Settings (Separator Pages)", expanded=False):
-            enable_border = st.checkbox(
-                "Enable Border",
-                help="Add decorative border to separator pages"
-            )
-            
-            if enable_border:
-                border_style = st.selectbox(
-                    "Border Style",
-                    options=['solid', 'dashed', 'double', 'asterisks'],
-                    format_func=lambda x: x.capitalize(),
-                    help="Style of border"
-                )
-                
-                border_color = st.selectbox(
-                    "Border Color",
-                    options=['black', 'blue', 'red', 'green', 'gray'],
-                    help="Color of border"
-                )
-                
-                border_width = st.slider(
-                    "Border Width",
-                    min_value=1.0,
-                    max_value=10.0,
-                    value=2.0,
-                    step=0.5,
-                    help="Width of border in points"
-                )
-                
-                if border_style in ['solid', 'dashed', 'double']:
-                    border_corner_radius = st.slider(
-                        "Corner Radius",
-                        min_value=0.0,
-                        max_value=20.0,
-                        value=0.0,
-                        step=1.0,
-                        help="Radius for rounded corners (0 for sharp corners)"
-                    )
-                else:
-                    border_corner_radius = 0.0
-            else:
-                border_style = "solid"
-                border_color = "black"
-                border_width = 2.0
-                border_corner_radius = 0.0
-        
         # Watermark Settings - Collapsible
         with st.expander("💧 Watermark Settings", expanded=False):
             enable_watermark = st.checkbox(
@@ -719,6 +672,66 @@ def main():
                 "Add Separator Page",
                 help="Add a page at the beginning showing Bates range"
             )
+            
+            # Border settings for separator pages (nested option)
+            if add_separator:
+                st.markdown("##### Border Settings")
+                
+                enable_border = st.checkbox(
+                    "Enable Border on Separator Page",
+                    help="Add decorative border to separator page"
+                )
+                
+                if enable_border:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        border_style = st.selectbox(
+                            "Border Style",
+                            options=['solid', 'dashed', 'double', 'asterisks'],
+                            format_func=lambda x: x.capitalize(),
+                            help="Style of border"
+                        )
+                    with col2:
+                        border_color = st.selectbox(
+                            "Border Color",
+                            options=['black', 'blue', 'red', 'green', 'gray'],
+                            help="Color of border"
+                        )
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        border_width = st.slider(
+                            "Border Width",
+                            min_value=1.0,
+                            max_value=10.0,
+                            value=2.0,
+                            step=0.5,
+                            help="Width of border in points"
+                        )
+                    with col2:
+                        if border_style in ['solid', 'dashed', 'double']:
+                            border_corner_radius = st.slider(
+                                "Corner Radius",
+                                min_value=0.0,
+                                max_value=20.0,
+                                value=0.0,
+                                step=1.0,
+                                help="Radius for rounded corners (0 for sharp corners)"
+                            )
+                        else:
+                            border_corner_radius = 0.0
+                else:
+                    border_style = "solid"
+                    border_color = "black"
+                    border_width = 2.0
+                    border_corner_radius = 0.0
+            else:
+                # Set defaults when separator page is not enabled
+                enable_border = False
+                border_style = "solid"
+                border_color = "black"
+                border_width = 2.0
+                border_corner_radius = 0.0
             
             st.divider()
             
