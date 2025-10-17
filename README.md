@@ -499,7 +499,6 @@ Completed in v1.1.0:
 
 Planned for future versions:
 - [ ] Integration with document management systems
-- [ ] OCR support for scanned documents
 - [ ] Multi-threaded processing for large batches
 - [ ] Cloud storage integration (Google Drive, Dropbox, OneDrive)
 - [ ] Batch job scheduling and automation
@@ -507,4 +506,41 @@ Planned for future versions:
 - [ ] Advanced reporting and analytics
 - [ ] Template management system
 - [ ] Digital signatures and certification
-- [ ] Redaction capabilities
+
+### AI & Intelligence Features
+
+**Phase 1: Document Intelligence (Foundation)**
+- [ ] **OCR support for scanned documents** - Extract text from image-based PDFs using Tesseract/Cloud OCR
+- [ ] **Automatic document classification** - Categorize documents by type (contracts, depositions, pleadings, etc.)
+- [ ] **Intelligent document boundary detection** - Auto-detect document separators in combined PDFs
+- [ ] **Smart metadata extraction** - Pull case numbers, dates, parties, and other key information
+
+**Phase 2: Smart Processing & Quality**
+- [ ] **AI-powered quality assurance** - Verify numbering continuity, detect missing pages, flag anomalies
+- [ ] **Duplicate and near-duplicate detection** - Identify redundant pages in batch processing
+- [ ] **Auto-suggest Bates prefixes** - Recommend prefixes based on document content and type
+- [ ] **Intelligent redaction detection** - Identify and suggest redaction of PII (SSNs, account numbers, etc.)
+
+**Phase 3: Search & Discovery**
+- [ ] **Full-text searchable index generation** - Create searchable database of all processed documents
+- [ ] **Semantic search capabilities** - Find documents by concept, not just keywords
+- [ ] **Named entity recognition** - Extract and index people, organizations, locations, dates
+- [ ] **AI document summarization** - Generate executive summaries of long documents
+
+**Phase 4: Enhanced User Experience**
+- [ ] **Natural language configuration** - Process documents using conversational commands
+- [ ] **AI assistant for troubleshooting** - Help users optimize workflows and solve issues
+- [ ] **Smart defaults based on usage patterns** - Learn from past configurations
+- [ ] **Workflow template suggestions** - AI-generated processing templates
+
+**Phase 5: Advanced Automation**
+- [ ] **Automatic document routing** - Organize processed files by type/category
+- [ ] **Batch processing optimization** - Suggest optimal grouping and numbering strategies
+- [ ] **Anomaly detection and alerting** - Flag unusual document characteristics
+- [ ] **Integration with LLMs via MCP** - Connect to local/cloud AI models for extensibility
+
+**Implementation Approaches:**
+- **Privacy-first**: Support for local AI models (Tesseract, spaCy, Ollama) for sensitive legal documents
+- **Cloud-powered**: Optional integration with OpenAI, Claude, Google Cloud Vision for advanced features
+- **Hybrid architecture**: Flexible design supporting both local and cloud AI capabilities
+- **MCP integration**: Modular AI tool connectivity through Model Context Protocol servers
