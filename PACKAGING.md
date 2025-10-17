@@ -205,15 +205,6 @@ bates --version
 - The CLI command is now simply `bates` instead of `python bates-numbering-script.py`
 - Tests provide 22% code coverage (primarily testing the BatesNumberer class initialization and number generation)
 
-## Next Steps
-
-1. **Update email in pyproject.toml** - Replace `adam@example.com` with your actual email
-2. **Create PyPI account** - Sign up at https://pypi.org if you want to publish
-3. **Generate API token** - For secure publishing to PyPI
-4. **Test locally** - Ensure everything works as expected
-5. **Publish to Test PyPI first** - Verify the package before production release
-6. **Publish to PyPI** - Make it available to the world!
-
 ## Additional Resources
 
 - [Poetry Documentation](https://python-poetry.org/docs/)
