@@ -33,8 +33,13 @@ poetry run bates --input document.pdf --bates-prefix "CASE-"
 - ✨ **Drag & drop file upload** - Upload single or multiple PDFs
 - 🎯 **Configuration presets** - Pre-configured for Legal Discovery, Confidential, Exhibits
 - 👁️ **Real-time preview** - See your Bates format before processing
-- 📊 **Visual progress tracking** - Watch your files being processed
-- ⚡ **Instant downloads** - Get your Bates-numbered PDFs immediately
+- 📊 **Live progress tracking** - Real-time status updates with cancel button
+- ⚡ **Instant downloads** - Individual files or bundled ZIP archive
+- 🎨 **Advanced customization** - Logos, QR codes, borders, watermarks
+- 🖼️ **Logo upload** - SVG, PNG, JPG, WEBP with flexible positioning
+- 📱 **QR code generation** - Embed Bates numbers as scannable QR codes
+- 🔲 **Border styling** - 4 decorative border styles for separator pages
+- 💧 **Watermark support** - Custom text overlays with opacity control
 - 🎨 **Improved UI** - Wider sidebar (420px), collapsible sections, professional design
 - 📱 **Responsive layout** - Works on different screen sizes
 
@@ -64,10 +69,15 @@ poetry run bates --input document.pdf --bates-prefix "CASE-"
 - ✅ Support for password-protected PDFs
 - ✅ Batch processing of multiple PDFs with continuous numbering
 - ✅ Progress tracking for large documents
+- ✅ **Real-time status updates** - Live progress tracking with cancellation support (Web UI)
 - ✅ **Combine multiple PDFs** into single file with continuous Bates numbering
 - ✅ **Index page generation** - Professional document index for combined PDFs
 - ✅ **Bates number filenames** - Name output files by first Bates number with CSV/PDF mappings
 - ✅ **Custom fonts** - Support for TrueType (.ttf) and OpenType (.otf) fonts
+- ✅ **Logo placement** - Upload and position logos on separator pages (SVG, PNG, JPG, WEBP)
+- ✅ **QR codes** - Generate QR codes with Bates numbers on all pages or separators
+- ✅ **Watermarks** - Add customizable text watermarks with opacity and rotation
+- ✅ **ZIP download** - Download all processed files as a single archive
 
 ### Customization Options
 - **Position**: Place Bates numbers at various positions on the page
@@ -75,8 +85,13 @@ poetry run bates --input document.pdf --bates-prefix "CASE-"
 - **Date/Time**: Include optional timestamp with Bates numbers
 - **Padding**: Configure number padding (e.g., 4 digits: "0001")
 - **Formatting**: Full control over prefix/suffix format
-- **Separator Pages**: Add separator pages between documents showing Bates ranges
+- **Separator Pages**: Add separator pages between documents showing Bates ranges with optional logos and borders
 - **Index Pages**: Generate professional table of contents for combined documents
+- **Logos**: Upload custom logos (SVG, PNG, JPG, WEBP) with 8 placement options
+- **QR Codes**: Generate QR codes containing Bates numbers (all pages or separator only)
+- **Borders**: Add decorative borders to separator pages (solid, dashed, double, asterisks)
+- **Watermarks**: Overlay custom text with configurable opacity, rotation, and positioning
+- **Download Options**: Individual files or bundled ZIP archive
 
 ## 📦 Installation
 
@@ -474,16 +489,22 @@ Completed in v1.1.0:
 - [x] **CSV/PDF mapping files** - Automatic generation when using Bates number filenames
 - [x] **PDF combining** - Merge multiple PDFs with continuous Bates numbering
 - [x] **Index page generation** - Professional document index for combined PDFs
-- [x] **Separator pages** - Optional pages between documents showing Bates ranges
+- [x] **Separator pages** - Optional pages between documents showing Bates ranges with logos and borders
+- [x] **Logo upload and placement** - SVG, PNG, JPG, WEBP support with 8 placement options
+- [x] **QR code generation** - Scannable QR codes containing Bates numbers (all pages or separator only)
+- [x] **Border styling** - 4 decorative border styles for separator pages (solid, dashed, double, asterisks)
+- [x] **Watermark capabilities** - Custom text overlays with opacity, rotation, and positioning control
+- [x] **ZIP download** - Bundle all processed files into single archive
+- [x] **Real-time status updates** - Live progress tracking with cancellation support (Web UI)
 
 Planned for future versions:
-- [ ] QR code generation alongside Bates numbers
 - [ ] Integration with document management systems
 - [ ] OCR support for scanned documents
-- [ ] Watermark capabilities
 - [ ] Multi-threaded processing for large batches
 - [ ] Cloud storage integration (Google Drive, Dropbox, OneDrive)
 - [ ] Batch job scheduling and automation
 - [ ] PDF form field preservation
 - [ ] Advanced reporting and analytics
 - [ ] Template management system
+- [ ] Digital signatures and certification
+- [ ] Redaction capabilities
