@@ -6,8 +6,9 @@ A user-friendly web interface for adding Bates numbers to PDF documents.
 import streamlit as st
 import tempfile
 import os
+import zipfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict
 from io import BytesIO
 
 from bates_labeler import BatesNumberer, __version__
@@ -107,6 +108,10 @@ def initialize_session_state():
     """Initialize session state variables."""
     if 'processed_files' not in st.session_state:
         st.session_state.processed_files = []
+    if 'cancel_requested' not in st.session_state:
+        st.session_state.cancel_requested = False
+    if 'processing_status' not in st.session_state:
+        st.session_state.processing_status = ""
     if 'config_presets' not in st.session_state:
         st.session_state.config_presets = {
             'Default': {
@@ -328,6 +333,31 @@ def process_with_bates_filenames(uploaded_files, config: dict, add_separator: bo
         return {'success': False, 'files': [], 'csv_mapping': None, 'pdf_mapping': None}
 
 
+def create_zip_archive(files_list: List[Dict]) -> bytes:
+    """
+    Create a ZIP archive containing all processed files.
+    
+    Args:
+        files_list: List of dicts with 'name' and 'data' keys
+        
+    Returns:
+        ZIP file as bytes
+    """
+    try:
+        zip_buffer = BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for file_info in files_list:
+                zip_file.writestr(file_info['name'], file_info['data'])
+        
+        zip_buffer.seek(0)
+        return zip_buffer.getvalue()
+        
+    except Exception as e:
+        st.error(f"Error creating ZIP archive: {str(e)}")
+        return None
+
+
 def main():
     """Main application function."""
     initialize_session_state()
@@ -439,6 +469,218 @@ def main():
                 bold = st.checkbox("Bold", value=True)
             with col2:
                 italic = st.checkbox("Italic", value=False)
+        
+        # Logo Upload - Collapsible
+        with st.expander("🖼️ Logo Upload", expanded=False):
+            logo_file = st.file_uploader(
+                "Upload Logo",
+                type=['svg', 'png', 'jpg', 'jpeg', 'webp'],
+                help="Upload a logo image (SVG, PNG, JPG, WEBP)"
+            )
+            
+            if logo_file:
+                st.success(f"✅ Logo loaded: {logo_file.name}")
+                
+                logo_placement = st.selectbox(
+                    "Logo Placement",
+                    options=['above_bates', 'top-left', 'top-center', 'top-right', 
+                            'bottom-left', 'bottom-center', 'bottom-right'],
+                    help="Where to place the logo on separator pages"
+                )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    logo_max_width = st.slider(
+                        "Max Width (in)",
+                        min_value=0.5,
+                        max_value=3.0,
+                        value=2.0,
+                        step=0.1,
+                        help="Maximum logo width in inches"
+                    )
+                with col2:
+                    logo_max_height = st.slider(
+                        "Max Height (in)",
+                        min_value=0.5,
+                        max_value=3.0,
+                        value=2.0,
+                        step=0.1,
+                        help="Maximum logo height in inches"
+                    )
+            else:
+                logo_placement = "above_bates"
+                logo_max_width = 2.0
+                logo_max_height = 2.0
+        
+        # QR Code Settings - Collapsible
+        with st.expander("📱 QR Code Settings", expanded=False):
+            enable_qr = st.checkbox(
+                "Enable QR Codes",
+                help="Generate QR codes containing Bates numbers"
+            )
+            
+            if enable_qr:
+                qr_placement = st.selectbox(
+                    "QR Placement",
+                    options=['all_pages', 'separator_only'],
+                    format_func=lambda x: 'All Pages' if x == 'all_pages' else 'Separator Pages Only',
+                    help="Where to place QR codes"
+                )
+                
+                qr_position = st.selectbox(
+                    "QR Position",
+                    options=['top-left', 'top-center', 'top-right', 
+                            'bottom-left', 'bottom-center', 'bottom-right'],
+                    index=3,  # Default to bottom-left
+                    help="Position of QR code on page"
+                )
+                
+                qr_size = st.slider(
+                    "QR Size (inches)",
+                    min_value=0.06,
+                    max_value=0.24,
+                    value=0.12,
+                    step=0.01,
+                    help="Size of QR code (12% of original range)"
+                )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    qr_color = st.selectbox(
+                        "QR Color",
+                        options=['black', 'blue', 'red', 'green'],
+                        help="Fill color of QR code"
+                    )
+                with col2:
+                    qr_background_color = st.selectbox(
+                        "QR Background",
+                        options=['white', 'gray', 'black'],
+                        help="Background color of QR code"
+                    )
+            else:
+                qr_placement = "disabled"
+                qr_position = "bottom-left"
+                qr_size = 0.12
+                qr_color = "black"
+                qr_background_color = "white"
+        
+        # Border Settings - Collapsible
+        with st.expander("🔲 Border Settings (Separator Pages)", expanded=False):
+            enable_border = st.checkbox(
+                "Enable Border",
+                help="Add decorative border to separator pages"
+            )
+            
+            if enable_border:
+                border_style = st.selectbox(
+                    "Border Style",
+                    options=['solid', 'dashed', 'double', 'asterisks'],
+                    format_func=lambda x: x.capitalize(),
+                    help="Style of border"
+                )
+                
+                border_color = st.selectbox(
+                    "Border Color",
+                    options=['black', 'blue', 'red', 'green', 'gray'],
+                    help="Color of border"
+                )
+                
+                border_width = st.slider(
+                    "Border Width",
+                    min_value=1.0,
+                    max_value=10.0,
+                    value=2.0,
+                    step=0.5,
+                    help="Width of border in points"
+                )
+                
+                if border_style in ['solid', 'dashed', 'double']:
+                    border_corner_radius = st.slider(
+                        "Corner Radius",
+                        min_value=0.0,
+                        max_value=20.0,
+                        value=0.0,
+                        step=1.0,
+                        help="Radius for rounded corners (0 for sharp corners)"
+                    )
+                else:
+                    border_corner_radius = 0.0
+            else:
+                border_style = "solid"
+                border_color = "black"
+                border_width = 2.0
+                border_corner_radius = 0.0
+        
+        # Watermark Settings - Collapsible
+        with st.expander("💧 Watermark Settings", expanded=False):
+            enable_watermark = st.checkbox(
+                "Enable Watermark",
+                help="Add watermark text to pages"
+            )
+            
+            if enable_watermark:
+                watermark_text = st.text_input(
+                    "Watermark Text",
+                    value="CONFIDENTIAL",
+                    help="Text to display as watermark"
+                )
+                
+                watermark_scope = st.selectbox(
+                    "Watermark Scope",
+                    options=['all_pages', 'document_only'],
+                    format_func=lambda x: 'All Pages' if x == 'all_pages' else 'Document Pages Only',
+                    help="Where to apply watermark"
+                )
+                
+                watermark_opacity = st.slider(
+                    "Opacity (%)",
+                    min_value=0,
+                    max_value=100,
+                    value=30,
+                    step=5,
+                    help="Transparency of watermark (0=invisible, 100=opaque)"
+                ) / 100.0
+                
+                watermark_rotation = st.slider(
+                    "Rotation (degrees)",
+                    min_value=0,
+                    max_value=360,
+                    value=45,
+                    step=5,
+                    help="Rotation angle of watermark text"
+                )
+                
+                watermark_position = st.selectbox(
+                    "Position",
+                    options=['center', 'top-left', 'top-center', 'top-right', 
+                            'bottom-left', 'bottom-center', 'bottom-right'],
+                    help="Position of watermark"
+                )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    watermark_font_size = st.slider(
+                        "Font Size",
+                        min_value=24,
+                        max_value=120,
+                        value=72,
+                        step=6,
+                        help="Size of watermark text"
+                    )
+                with col2:
+                    watermark_color = st.selectbox(
+                        "Color",
+                        options=['gray', 'black', 'red', 'blue'],
+                        help="Color of watermark"
+                    )
+            else:
+                watermark_text = "CONFIDENTIAL"
+                watermark_scope = "disabled"
+                watermark_opacity = 0.3
+                watermark_rotation = 45
+                watermark_position = "center"
+                watermark_font_size = 72
+                watermark_color = "gray"
         
         # Advanced Options - Collapsible
         with st.expander("⚙️ Advanced Options", expanded=False):
@@ -564,6 +806,9 @@ def main():
     # Process button
     if uploaded_files:
         if st.button("🚀 Process PDF(s)", type="primary", use_container_width=True):
+            # Reset cancel flag
+            st.session_state.cancel_requested = False
+            
             # Handle custom font if uploaded
             custom_font_path = None
             if custom_font:
@@ -571,6 +816,36 @@ def main():
                 with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(custom_font.name)[1]) as tmp_font:
                     tmp_font.write(custom_font.read())
                     custom_font_path = tmp_font.name
+            
+            # Handle logo if uploaded
+            logo_path = None
+            if logo_file:
+                # Save logo to temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(logo_file.name)[1]) as tmp_logo:
+                    tmp_logo.write(logo_file.read())
+                    logo_path = tmp_logo.name
+            
+            # Create status display containers
+            status_container = st.empty()
+            progress_container = st.empty()
+            cancel_container = st.empty()
+            
+            # Status callback function
+            def status_callback(message, progress_dict=None):
+                st.session_state.processing_status = message
+                status_container.info(f"⚙️ {message}")
+                if progress_dict and 'current' in progress_dict and 'total' in progress_dict:
+                    progress = progress_dict['current'] / progress_dict['total']
+                    progress_container.progress(progress)
+            
+            # Cancel callback function  
+            def cancel_callback():
+                return st.session_state.cancel_requested
+            
+            # Add cancel button
+            if cancel_container.button("❌ Cancel Processing", key="cancel_btn"):
+                st.session_state.cancel_requested = True
+                status_container.warning("⚠️ Cancellation requested...")
             
             # Build configuration for BatesNumberer (constructor parameters only)
             numberer_config = {
@@ -588,18 +863,47 @@ def main():
                 'date_format': date_format,
                 'add_background': add_background,
                 'background_padding': background_padding,
-                'custom_font_path': custom_font_path
+                'custom_font_path': custom_font_path,
+                # Logo settings
+                'logo_path': logo_path,
+                'logo_placement': logo_placement,
+                'logo_max_width': logo_max_width,
+                'logo_max_height': logo_max_height,
+                # QR code settings
+                'enable_qr': enable_qr,
+                'qr_placement': qr_placement,
+                'qr_position': qr_position,
+                'qr_size': qr_size,
+                'qr_color': qr_color,
+                'qr_background_color': qr_background_color,
+                # Border settings
+                'enable_border': enable_border,
+                'border_style': border_style,
+                'border_color': border_color,
+                'border_width': border_width,
+                'border_corner_radius': border_corner_radius,
+                # Watermark settings
+                'enable_watermark': enable_watermark,
+                'watermark_text': watermark_text,
+                'watermark_scope': watermark_scope,
+                'watermark_opacity': watermark_opacity,
+                'watermark_rotation': watermark_rotation,
+                'watermark_position': watermark_position,
+                'watermark_font_size': watermark_font_size,
+                'watermark_color': watermark_color,
+                # Callback functions
+                'status_callback': status_callback,
+                'cancel_callback': cancel_callback
             }
             
-            # Process files based on selected options
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            # Process files based on selected options (hide default progress bar)
+            status_callback("Starting processing...")
             
             st.session_state.processed_files = []
             
             # Option 1: Combine PDFs
             if combine_pdfs:
-                status_text.text("Combining and processing PDFs...")
+                status_callback("Combining and processing PDFs...")
                 result = process_combined_pdfs(uploaded_files, numberer_config, add_document_separators, add_index_page)
                 
                 if result['success']:
@@ -644,11 +948,12 @@ def main():
                                     })
                             os.unlink(pdf_tmp.name)
                 
-                progress_bar.progress(1.0)
+                status_callback("Processing complete!")
+                progress_container.progress(1.0)
             
             # Option 2: Bates filenames (without combine)
             elif use_bates_filenames:
-                status_text.text("Processing with Bates number filenames...")
+                status_callback("Processing with Bates number filenames...")
                 result = process_with_bates_filenames(uploaded_files, numberer_config, add_separator)
                 
                 if result['success']:
@@ -668,12 +973,16 @@ def main():
                             'data': result['pdf_mapping']
                         })
                 
-                progress_bar.progress(1.0)
+                status_callback("Processing complete!")
+                progress_container.progress(1.0)
             
             # Option 3: Standard processing (original behavior)
             else:
                 for i, uploaded_file in enumerate(uploaded_files):
-                    status_text.text(f"Processing {uploaded_file.name}...")
+                    status_callback(f"Processing {uploaded_file.name}...", {
+                        'current': i + 1,
+                        'total': len(uploaded_files)
+                    })
                     
                     # Process the file
                     output_data = process_pdf(uploaded_file, numberer_config, add_separator)
@@ -683,12 +992,14 @@ def main():
                             'name': uploaded_file.name.replace('.pdf', '_bates.pdf'),
                             'data': output_data
                         })
-                    
-                    # Update progress
-                    progress_bar.progress((i + 1) / len(uploaded_files))
+                
+                status_callback("Processing complete!")
+                progress_container.progress(1.0)
             
-            status_text.empty()
-            progress_bar.empty()
+            # Clean up status displays
+            status_container.empty()
+            progress_container.empty()
+            cancel_container.empty()
             
             # Show success message
             if st.session_state.processed_files:
@@ -703,21 +1014,49 @@ def main():
     if st.session_state.processed_files:
         st.subheader("📥 Download Processed Files")
         
-        col1, col2, col3 = st.columns(3)
+        # Download options (only show if multiple files)
+        if len(st.session_state.processed_files) > 1:
+            download_mode = st.radio(
+                "Download Options",
+                options=["Individual Files", "Download as ZIP"],
+                horizontal=True,
+                help="Choose to download files individually or bundled in a ZIP archive"
+            )
+        else:
+            download_mode = "Individual Files"
         
-        for i, processed_file in enumerate(st.session_state.processed_files):
-            with [col1, col2, col3][i % 3]:
-                # Determine MIME type based on file extension
-                mime_type = 'text/csv' if processed_file['name'].endswith('.csv') else 'application/pdf'
-                
+        if download_mode == "Download as ZIP":
+            # Create and offer ZIP download
+            zip_data = create_zip_archive(st.session_state.processed_files)
+            
+            if zip_data:
                 st.download_button(
-                    label=f"⬇️ {processed_file['name']}",
-                    data=processed_file['data'],
-                    file_name=processed_file['name'],
-                    mime=mime_type,
+                    label=f"📦 Download All Files as ZIP ({len(st.session_state.processed_files)} files)",
+                    data=zip_data,
+                    file_name="bates_numbered_files.zip",
+                    mime="application/zip",
                     use_container_width=True,
-                    key=f"download_btn_{i}_{processed_file['name']}"
+                    type="primary"
                 )
+        else:
+            # Individual file downloads (original behavior)
+            col1, col2, col3 = st.columns(3)
+            
+            for i, processed_file in enumerate(st.session_state.processed_files):
+                with [col1, col2, col3][i % 3]:
+                    # Determine MIME type based on file extension
+                    mime_type = 'text/csv' if processed_file['name'].endswith('.csv') else 'application/pdf'
+                    
+                    st.download_button(
+                        label=f"⬇️ {processed_file['name']}",
+                        data=processed_file['data'],
+                        file_name=processed_file['name'],
+                        mime=mime_type,
+                        use_container_width=True,
+                        key=f"download_btn_{i}_{processed_file['name']}"
+                    )
+        
+        st.divider()
         
         if st.button("🗑️ Clear Processed Files", use_container_width=True):
             st.session_state.processed_files = []

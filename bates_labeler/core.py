@@ -2,6 +2,8 @@
 
 import os
 import csv
+import io
+import zipfile
 from datetime import datetime
 from typing import Tuple, Optional, List, Dict
 import getpass
@@ -16,6 +18,12 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from tqdm import tqdm
+
+# New imports for additional features
+import qrcode
+from PIL import Image
+from svglib.svglib import svg2rlg
+from reportlab.graphics import renderPDF
 
 
 # Position mappings
@@ -48,7 +56,37 @@ class BatesNumberer:
                  date_format: str = "%Y-%m-%d",
                  add_background: bool = True,
                  background_padding: int = 3,
-                 custom_font_path: Optional[str] = None):
+                 custom_font_path: Optional[str] = None,
+                 # Logo settings
+                 logo_path: Optional[str] = None,
+                 logo_placement: str = "above_bates",
+                 logo_max_width: float = 2.0,
+                 logo_max_height: float = 2.0,
+                 # QR code settings
+                 enable_qr: bool = False,
+                 qr_placement: str = "disabled",
+                 qr_position: str = "bottom-left",
+                 qr_size: float = 1.0,
+                 qr_color: str = "black",
+                 qr_background_color: str = "white",
+                 # Border settings (for separator pages)
+                 enable_border: bool = False,
+                 border_style: str = "solid",
+                 border_color: str = "black",
+                 border_width: float = 2.0,
+                 border_corner_radius: float = 0,
+                 # Watermark settings
+                 enable_watermark: bool = False,
+                 watermark_text: str = "CONFIDENTIAL",
+                 watermark_scope: str = "disabled",
+                 watermark_opacity: float = 0.3,
+                 watermark_rotation: float = 45,
+                 watermark_position: str = "center",
+                 watermark_font_size: int = 72,
+                 watermark_color: str = "gray",
+                 # Callback functions
+                 status_callback: Optional[callable] = None,
+                 cancel_callback: Optional[callable] = None):
         """
         Initialize Bates numbering configuration.
         
@@ -68,9 +106,38 @@ class BatesNumberer:
             add_background: Add white background behind text
             background_padding: Padding around text background in pixels
             custom_font_path: Path to custom TrueType (.ttf) or OpenType (.otf) font file
+            logo_path: Path to logo file (SVG, PNG, JPG, WEBP)
+            logo_placement: Logo placement (above_bates, top-left, top-center, top-right, bottom-left, bottom-center, bottom-right)
+            logo_max_width: Maximum logo width in inches
+            logo_max_height: Maximum logo height in inches
+            enable_qr: Enable QR code generation
+            qr_placement: QR code placement (all_pages, separator_only, disabled)
+            qr_position: QR code position on page
+            qr_size: QR code size in inches
+            qr_color: QR code fill color
+            qr_background_color: QR code background color
+            enable_border: Enable border on separator pages
+            border_style: Border style (solid, dashed, double, asterisks)
+            border_color: Border color
+            border_width: Border width in points
+            border_corner_radius: Corner radius for rounded borders
+            enable_watermark: Enable watermark
+            watermark_text: Watermark text
+            watermark_scope: Watermark scope (all_pages, document_only, disabled)
+            watermark_opacity: Watermark opacity (0-1)
+            watermark_rotation: Watermark rotation in degrees
+            watermark_position: Watermark position
+            watermark_font_size: Watermark font size
+            watermark_color: Watermark color
+            status_callback: Optional callback function for status updates (message, progress_dict)
+            cancel_callback: Optional callback function to check if processing should be cancelled
         """
         self.prefix = prefix
         self.current_number = start_number
+        
+        # Callback functions
+        self.status_callback = status_callback
+        self.cancel_callback = cancel_callback
         self.padding = padding
         self.suffix = suffix
         self.position = position
@@ -90,6 +157,40 @@ class BatesNumberer:
         self.date_format = date_format
         self.add_background = add_background
         self.background_padding = background_padding
+        
+        # Logo settings
+        self.logo_path = logo_path
+        self.logo_placement = logo_placement
+        self.logo_max_width = logo_max_width * inch
+        self.logo_max_height = logo_max_height * inch
+        self.logo_image = None
+        if logo_path:
+            self.logo_image = self._load_and_scale_logo(logo_path)
+        
+        # QR code settings
+        self.enable_qr = enable_qr
+        self.qr_placement = qr_placement
+        self.qr_position = qr_position
+        self.qr_size = qr_size * inch
+        self.qr_color = qr_color
+        self.qr_background_color = qr_background_color
+        
+        # Border settings
+        self.enable_border = enable_border
+        self.border_style = border_style
+        self.border_color = self._parse_color(border_color)
+        self.border_width = border_width
+        self.border_corner_radius = border_corner_radius
+        
+        # Watermark settings
+        self.enable_watermark = enable_watermark
+        self.watermark_text = watermark_text
+        self.watermark_scope = watermark_scope
+        self.watermark_opacity = watermark_opacity
+        self.watermark_rotation = watermark_rotation
+        self.watermark_position = watermark_position
+        self.watermark_font_size = watermark_font_size
+        self.watermark_color = self._parse_color(watermark_color)
         
     def _get_font_name(self, base_font: str, bold: bool, italic: bool) -> str:
         """Get the appropriate font name based on style options."""
@@ -176,6 +277,320 @@ class BatesNumberer:
             print("Falling back to default font...")
             return None
     
+    def _load_and_scale_logo(self, logo_path: str) -> Optional[Dict]:
+        """
+        Load and scale a logo image.
+        
+        Args:
+            logo_path: Path to logo file (SVG, PNG, JPG, WEBP)
+            
+        Returns:
+            Dict with 'type', 'data', 'width', 'height' or None if failed
+        """
+        try:
+            if not os.path.exists(logo_path):
+                print(f"Warning: Logo file not found: {logo_path}")
+                return None
+            
+            file_ext = os.path.splitext(logo_path)[1].lower()
+            
+            # Handle SVG files
+            if file_ext == '.svg':
+                drawing = svg2rlg(logo_path)
+                if not drawing:
+                    print(f"Warning: Could not load SVG: {logo_path}")
+                    return None
+                
+                # Scale to fit within max dimensions
+                scale_x = self.logo_max_width / drawing.width if drawing.width > 0 else 1
+                scale_y = self.logo_max_height / drawing.height if drawing.height > 0 else 1
+                scale = min(scale_x, scale_y, 1.0)  # Don't scale up, only down
+                
+                return {
+                    'type': 'svg',
+                    'data': drawing,
+                    'width': drawing.width * scale,
+                    'height': drawing.height * scale,
+                    'scale': scale
+                }
+            
+            # Handle raster formats (PNG, JPG, WEBP)
+            elif file_ext in ['.png', '.jpg', '.jpeg', '.webp']:
+                img = Image.open(logo_path)
+                
+                # Get original dimensions in points (assuming 72 DPI)
+                width_pts = img.width * 72 / img.info.get('dpi', (72, 72))[0]
+                height_pts = img.height * 72 / img.info.get('dpi', (72, 72))[1]
+                
+                # Scale to fit within max dimensions
+                scale_x = self.logo_max_width / width_pts if width_pts > 0 else 1
+                scale_y = self.logo_max_height / height_pts if height_pts > 0 else 1
+                scale = min(scale_x, scale_y, 1.0)
+                
+                # Save to temporary file for reportlab
+                temp_img_path = f"temp_logo{file_ext}"
+                img.save(temp_img_path)
+                
+                return {
+                    'type': 'raster',
+                    'data': temp_img_path,
+                    'width': width_pts * scale,
+                    'height': height_pts * scale,
+                    'original_path': logo_path
+                }
+            else:
+                print(f"Warning: Unsupported logo format: {file_ext}")
+                return None
+                
+        except Exception as e:
+            print(f"Error loading logo: {str(e)}")
+            return None
+    
+    def _create_qr_code(self, data: str) -> Optional[str]:
+        """
+        Generate a QR code image.
+        
+        Args:
+            data: Data to encode in QR code
+            
+        Returns:
+            Path to temporary QR code image file or None if failed
+        """
+        try:
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=1,
+            )
+            qr.add_data(data)
+            qr.make(fit=True)
+            
+            # Use configurable colors
+            img = qr.make_image(fill_color=self.qr_color, back_color=self.qr_background_color)
+            
+            # Save to temporary file
+            temp_path = f"temp_qr_{abs(hash(data))}.png"
+            img.save(temp_path)
+            
+            return temp_path
+            
+        except Exception as e:
+            print(f"Error creating QR code: {str(e)}")
+            return None
+    
+    def _draw_border(self, c: canvas.Canvas, page_width: float, page_height: float,
+                    margin: float = 36) -> None:
+        """
+        Draw a border on the canvas based on border settings.
+        
+        Args:
+            c: ReportLab canvas object
+            page_width: Page width in points
+            page_height: Page height in points
+            margin: Margin from page edges in points
+        """
+        if not self.enable_border:
+            return
+        
+        try:
+            c.setStrokeColor(self.border_color)
+            c.setLineWidth(self.border_width)
+            
+            x1, y1 = margin, margin
+            x2, y2 = page_width - margin, page_height - margin
+            
+            if self.border_style == "solid":
+                if self.border_corner_radius > 0:
+                    c.roundRect(x1, y1, x2 - x1, y2 - y1, self.border_corner_radius)
+                else:
+                    c.rect(x1, y1, x2 - x1, y2 - y1)
+                    
+            elif self.border_style == "dashed":
+                c.setDash(6, 3)
+                if self.border_corner_radius > 0:
+                    c.roundRect(x1, y1, x2 - x1, y2 - y1, self.border_corner_radius)
+                else:
+                    c.rect(x1, y1, x2 - x1, y2 - y1)
+                c.setDash()  # Reset to solid
+                
+            elif self.border_style == "double":
+                offset = self.border_width * 2
+                # Outer rectangle
+                c.rect(x1, y1, x2 - x1, y2 - y1)
+                # Inner rectangle
+                c.rect(x1 + offset, y1 + offset, (x2 - x1) - (2 * offset), (y2 - y1) - (2 * offset))
+                
+            elif self.border_style == "asterisks":
+                # Draw asterisks around the border
+                c.setFont("Helvetica", 12)
+                c.setFillColor(self.border_color)
+                
+                # Top and bottom borders
+                spacing = 20
+                for x in range(int(x1), int(x2), spacing):
+                    c.drawString(x, y2 + 5, "*")  # Top
+                    c.drawString(x, y1 - 15, "*")  # Bottom
+                
+                # Left and right borders
+                for y in range(int(y1), int(y2), spacing):
+                    c.drawString(x1 - 10, y, "*")  # Left
+                    c.drawString(x2 + 2, y, "*")  # Right
+                    
+        except Exception as e:
+            print(f"Error drawing border: {str(e)}")
+    
+    def _draw_logo_on_canvas(self, c: canvas.Canvas, page_width: float, page_height: float,
+                            bates_y: Optional[float] = None) -> None:
+        """
+        Draw logo on canvas based on logo settings.
+        
+        Args:
+            c: ReportLab canvas object
+            page_width: Page width in points
+            page_height: Page height in points
+            bates_y: Y position of Bates number (for above_bates placement)
+        """
+        if not self.logo_image:
+            return
+        
+        try:
+            logo_width = self.logo_image['width']
+            logo_height = self.logo_image['height']
+            
+            # Calculate position based on placement
+            if self.logo_placement == "above_bates" and bates_y:
+                x = (page_width - logo_width) / 2
+                y = bates_y + 30  # 30 points above Bates number
+            elif self.logo_placement == "top-left":
+                x, y = 0.5 * inch, page_height - logo_height - (0.5 * inch)
+            elif self.logo_placement == "top-center":
+                x = (page_width - logo_width) / 2
+                y = page_height - logo_height - (0.5 * inch)
+            elif self.logo_placement == "top-right":
+                x = page_width - logo_width - (0.5 * inch)
+                y = page_height - logo_height - (0.5 * inch)
+            elif self.logo_placement == "bottom-left":
+                x, y = 0.5 * inch, 0.5 * inch
+            elif self.logo_placement == "bottom-center":
+                x = (page_width - logo_width) / 2
+                y = 0.5 * inch
+            elif self.logo_placement == "bottom-right":
+                x = page_width - logo_width - (0.5 * inch)
+                y = 0.5 * inch
+            else:
+                # Default to center
+                x = (page_width - logo_width) / 2
+                y = (page_height - logo_height) / 2
+            
+            # Draw logo based on type
+            if self.logo_image['type'] == 'svg':
+                drawing = self.logo_image['data']
+                scale = self.logo_image['scale']
+                drawing.scale(scale, scale)
+                renderPDF.draw(drawing, c, x, y)
+            else:  # raster
+                c.drawImage(self.logo_image['data'], x, y, 
+                          width=logo_width, height=logo_height,
+                          preserveAspectRatio=True, mask='auto')
+                
+        except Exception as e:
+            print(f"Error drawing logo: {str(e)}")
+    
+    def _draw_qr_on_canvas(self, c: canvas.Canvas, page_width: float, page_height: float,
+                          qr_data: str) -> None:
+        """
+        Draw QR code on canvas.
+        
+        Args:
+            c: ReportLab canvas object
+            page_width: Page width in points
+            page_height: Page height in points
+            qr_data: Data to encode in QR code
+        """
+        try:
+            qr_path = self._create_qr_code(qr_data)
+            if not qr_path:
+                return
+            
+            # Calculate position based on qr_position
+            if self.qr_position in POSITION_COORDINATES:
+                x, y = POSITION_COORDINATES[self.qr_position]
+                x = x * inch
+                y = y * inch
+            else:
+                x, y = 0.5 * inch, 0.5 * inch
+            
+            # Adjust position based on page size
+            if 'right' in self.qr_position:
+                x = page_width - self.qr_size - (0.5 * inch)
+            elif 'center' in self.qr_position:
+                x = (page_width - self.qr_size) / 2
+            
+            if 'top' in self.qr_position:
+                y = page_height - self.qr_size - (0.5 * inch)
+            
+            # Draw QR code
+            c.drawImage(qr_path, x, y, width=self.qr_size, height=self.qr_size)
+            
+            # Clean up temp file
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+                
+        except Exception as e:
+            print(f"Error drawing QR code: {str(e)}")
+    
+    def create_watermark_overlay(self, page_width: float, page_height: float,
+                                output_path: str) -> None:
+        """
+        Create a PDF overlay with watermark.
+        
+        Args:
+            page_width: Width of the page in points
+            page_height: Height of the page in points
+            output_path: Path to save the watermark overlay PDF
+        """
+        try:
+            c = canvas.Canvas(output_path, pagesize=(page_width, page_height))
+            
+            # Set transparency
+            c.setFillAlpha(self.watermark_opacity)
+            c.setFillColor(self.watermark_color)
+            
+            # Set font
+            c.setFont("Helvetica-Bold", self.watermark_font_size)
+            
+            # Calculate position
+            if self.watermark_position == "center" or self.watermark_rotation != 0:
+                # For rotated text, use center of page
+                center_x = page_width / 2
+                center_y = page_height / 2
+                
+                # Save state, rotate, draw, restore
+                c.saveState()
+                c.translate(center_x, center_y)
+                c.rotate(self.watermark_rotation)
+                
+                text_width = c.stringWidth(self.watermark_text, "Helvetica-Bold", 
+                                          self.watermark_font_size)
+                c.drawString(-text_width / 2, 0, self.watermark_text)
+                c.restoreState()
+            else:
+                # Use position coordinates
+                if self.watermark_position in POSITION_COORDINATES:
+                    x, y = POSITION_COORDINATES[self.watermark_position]
+                    x = x * inch
+                    y = y * inch
+                else:
+                    x, y = page_width / 2, page_height / 2
+                
+                c.drawString(x, y, self.watermark_text)
+            
+            c.save()
+            
+        except Exception as e:
+            print(f"Error creating watermark: {str(e)}")
+    
     def get_next_bates_number(self) -> str:
         """Generate the next Bates number in sequence."""
         # Format the number with padding
@@ -203,9 +618,19 @@ class BatesNumberer:
         """
         c = canvas.Canvas(output_path, pagesize=(page_width, page_height))
         
+        # Draw border if enabled
+        self._draw_border(c, page_width, page_height)
+        
         # Center position
         center_x = page_width / 2
         center_y = page_height / 2
+        
+        # Draw logo if enabled and placement is above_bates
+        if self.logo_image and self.logo_placement == "above_bates":
+            self._draw_logo_on_canvas(c, page_width, page_height, bates_y=center_y)
+        elif self.logo_image:
+            # For other placements, don't pass bates_y
+            self._draw_logo_on_canvas(c, page_width, page_height)
         
         # Draw first Bates number (large, bold)
         c.setFont(self._get_font_name("Helvetica", True, False), 20)
@@ -216,6 +641,10 @@ class BatesNumberer:
         range_text = f"{first_bates} - {last_bates}"
         c.setFont(self._get_font_name("Helvetica", False, True), 14)
         c.drawCentredString(center_x, center_y - 30, range_text)
+        
+        # Draw QR code if enabled and placement is separator_only
+        if self.enable_qr and self.qr_placement == "separator_only":
+            self._draw_qr_on_canvas(c, page_width, page_height, first_bates)
         
         c.save()
     
@@ -368,6 +797,10 @@ class BatesNumberer:
             c.setFillColor(self.font_color)
             c.drawString(x, date_y, date_str)
         
+        # Draw QR code if enabled and placement is all_pages
+        if self.enable_qr and self.qr_placement == "all_pages":
+            self._draw_qr_on_canvas(c, page_width, page_height, bates_number)
+        
         c.save()
     
     def process_pdf(self, input_path: str, output_path: str, 
@@ -390,13 +823,24 @@ class BatesNumberer:
         """
         metadata = {
             'success': False,
+            'cancelled': False,
             'first_bates': None,
             'last_bates': None,
             'page_count': 0,
             'original_filename': os.path.basename(input_path)
         }
         try:
+            # Check for cancellation
+            if self.cancel_callback and self.cancel_callback():
+                metadata['cancelled'] = True
+                return metadata if return_metadata else False
+            
             # Read the input PDF
+            if self.status_callback:
+                self.status_callback(f"Reading PDF: {os.path.basename(input_path)}", {
+                    'operation': 'reading',
+                    'file': os.path.basename(input_path)
+                })
             print(f"Reading PDF: {input_path}")
             reader = PdfReader(input_path)
             
@@ -454,7 +898,27 @@ class BatesNumberer:
                 os.remove(separator_path)
             
             # Process each page with progress bar
-            for page_num in tqdm(range(total_pages), desc="Adding Bates numbers"):
+            for page_num in tqdm(range(total_pages), desc="Adding Bates numbers", disable=bool(self.status_callback)):
+                # Check for cancellation
+                if self.cancel_callback and self.cancel_callback():
+                    if self.status_callback:
+                        self.status_callback("Processing cancelled by user", {
+                            'operation': 'cancelled',
+                            'current': page_num,
+                            'total': total_pages
+                        })
+                    metadata['cancelled'] = True
+                    return metadata if return_metadata else False
+                
+                # Status update
+                if self.status_callback:
+                    self.status_callback(f"Processing page {page_num + 1}/{total_pages}", {
+                        'operation': 'processing_page',
+                        'current': page_num + 1,
+                        'total': total_pages,
+                        'file': os.path.basename(input_path)
+                    })
+                
                 page = reader.pages[page_num]
                 
                 # Get page dimensions
@@ -463,6 +927,32 @@ class BatesNumberer:
                 
                 # Generate Bates number for this page
                 bates_number = self.get_next_bates_number()
+                
+                # Apply watermark if enabled and scope includes document pages
+                if self.enable_watermark and self.watermark_scope in ["all_pages", "document_only"]:
+                    if self.status_callback:
+                        self.status_callback(f"Applying watermark to page {page_num + 1}/{total_pages}", {
+                            'operation': 'applying_watermark',
+                            'current': page_num + 1,
+                            'total': total_pages
+                        })
+                    
+                    watermark_path = f"temp_watermark_{page_num}.pdf"
+                    self.create_watermark_overlay(page_width, page_height, watermark_path)
+                    
+                    watermark_reader = PdfReader(watermark_path)
+                    watermark_page = watermark_reader.pages[0]
+                    page.merge_page(watermark_page)
+                    os.remove(watermark_path)
+                
+                # Status update for Bates numbering
+                if self.status_callback:
+                    self.status_callback(f"Adding Bates number {bates_number}", {
+                        'operation': 'applying_bates',
+                        'current': page_num + 1,
+                        'total': total_pages,
+                        'bates': bates_number
+                    })
                 
                 # Create overlay
                 overlay_path = f"temp_overlay_{page_num}.pdf"
@@ -485,11 +975,21 @@ class BatesNumberer:
                 writer.add_metadata(reader.metadata)
             
             # Write output
+            if self.status_callback:
+                self.status_callback(f"Saving PDF to {os.path.basename(output_path)}", {
+                    'operation': 'saving',
+                    'file': os.path.basename(output_path)
+                })
             print(f"Saving to: {output_path}")
             with open(output_path, 'wb') as output_file:
                 writer.write(output_file)
             
             pages_processed = total_pages + (1 if add_separator else 0)
+            if self.status_callback:
+                self.status_callback(f"Successfully processed {pages_processed} pages", {
+                    'operation': 'complete',
+                    'total_pages': pages_processed
+                })
             print(f"Successfully processed {pages_processed} pages")
             metadata['success'] = True
             
