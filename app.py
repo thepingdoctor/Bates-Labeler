@@ -12,6 +12,25 @@ from typing import List, Optional, Dict
 from io import BytesIO
 
 from bates_labeler import BatesNumberer, __version__
+import json
+import base64
+from datetime import datetime
+
+# Import keyboard shortcuts component
+try:
+    from st_keyup import st_keyup
+    KEYUP_AVAILABLE = True
+except ImportError:
+    KEYUP_AVAILABLE = False
+    print("Warning: streamlit-keyup not installed. Keyboard shortcuts will be disabled.")
+
+# Import OCR module (optional)
+try:
+    from bates_labeler.ocr import OCRExtractor, OCRBackend
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+    print("Warning: OCR dependencies not installed. OCR features will be disabled.")
 
 # Page configuration
 st.set_page_config(
@@ -112,6 +131,16 @@ def initialize_session_state():
         st.session_state.cancel_requested = False
     if 'processing_status' not in st.session_state:
         st.session_state.processing_status = ""
+    if 'file_order' not in st.session_state:
+        st.session_state.file_order = []
+    if 'processing_history' not in st.session_state:
+        st.session_state.processing_history = []
+    if 'current_config' not in st.session_state:
+        st.session_state.current_config = {}
+    if 'preview_file_index' not in st.session_state:
+        st.session_state.preview_file_index = 0
+    if 'file_progress' not in st.session_state:
+        st.session_state.file_progress = {}
     if 'config_presets' not in st.session_state:
         st.session_state.config_presets = {
             'Default': {
@@ -144,11 +173,230 @@ def initialize_session_state():
             }
         }
 
+    # Initialize undo/redo state history (last 20 states)
+    if 'state_history' not in st.session_state:
+        st.session_state.state_history = []
+    if 'state_history_index' not in st.session_state:
+        st.session_state.state_history_index = -1
+    if 'keyboard_command' not in st.session_state:
+        st.session_state.keyboard_command = None
+
+
+def save_state_to_history(config_state: dict):
+    """
+    Save current configuration state to history for undo/redo.
+
+    Args:
+        config_state: Dictionary containing all configuration values
+    """
+    # Remove any states after current index (when user made changes after undo)
+    if st.session_state.state_history_index < len(st.session_state.state_history) - 1:
+        st.session_state.state_history = st.session_state.state_history[:st.session_state.state_history_index + 1]
+
+    # Add new state
+    st.session_state.state_history.append(config_state.copy())
+
+    # Limit to last 20 states
+    if len(st.session_state.state_history) > 20:
+        st.session_state.state_history = st.session_state.state_history[-20:]
+
+    # Update index to point to latest state
+    st.session_state.state_history_index = len(st.session_state.state_history) - 1
+
+
+def undo_state():
+    """Undo to previous configuration state."""
+    if st.session_state.state_history_index > 0:
+        st.session_state.state_history_index -= 1
+        return st.session_state.state_history[st.session_state.state_history_index]
+    return None
+
+
+def redo_state():
+    """Redo to next configuration state."""
+    if st.session_state.state_history_index < len(st.session_state.state_history) - 1:
+        st.session_state.state_history_index += 1
+        return st.session_state.state_history[st.session_state.state_history_index]
+    return None
+
+
+def can_undo() -> bool:
+    """Check if undo is available."""
+    return st.session_state.state_history_index > 0
+
+
+def can_redo() -> bool:
+    """Check if redo is available."""
+    return st.session_state.state_history_index < len(st.session_state.state_history) - 1
+
+
+def handle_keyboard_shortcuts():
+    """
+    Handle keyboard shortcuts using streamlit-keyup.
+
+    Shortcuts:
+    - Ctrl+Z: Undo
+    - Ctrl+Y: Redo
+    - Ctrl+P: Process PDFs
+    - Ctrl+S: Save configuration
+    - Ctrl+D: Download files
+    - Ctrl+R: Reset settings
+    """
+    if not KEYUP_AVAILABLE:
+        return None
+
+    # Hidden input field to capture keyboard events
+    shortcut = st_keyup("", key="keyboard_shortcuts", placeholder="Press keyboard shortcuts...")
+
+    # Parse keyboard shortcuts (streamlit-keyup returns the key pressed)
+    if shortcut:
+        # Store command in session state for processing
+        if shortcut == "ctrl+z":
+            return "undo"
+        elif shortcut == "ctrl+y":
+            return "redo"
+        elif shortcut == "ctrl+p":
+            return "process"
+        elif shortcut == "ctrl+s":
+            return "save"
+        elif shortcut == "ctrl+d":
+            return "download"
+        elif shortcut == "ctrl+r":
+            return "reset"
+
+    return None
+
 
 def generate_preview(prefix: str, start_number: int, padding: int, suffix: str) -> str:
     """Generate a preview of the Bates number format."""
     number_str = str(start_number).zfill(padding)
     return f"{prefix}{number_str}{suffix}"
+
+
+def save_config_to_history(config: dict, name: str = None):
+    """Save current configuration to processing history."""
+    if name is None:
+        name = f"Session {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+    history_entry = {
+        'name': name,
+        'timestamp': datetime.now().isoformat(),
+        'config': config.copy()
+    }
+
+    # Add to history (keep last 10 entries)
+    st.session_state.processing_history.insert(0, history_entry)
+    if len(st.session_state.processing_history) > 10:
+        st.session_state.processing_history = st.session_state.processing_history[:10]
+
+
+def load_config_from_history(history_entry: dict):
+    """Load configuration from history entry."""
+    return history_entry['config'].copy()
+
+
+def export_config_as_json(config: dict) -> str:
+    """Export configuration as JSON string."""
+    return json.dumps(config, indent=2)
+
+
+def import_config_from_json(json_str: str) -> dict:
+    """Import configuration from JSON string."""
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        return None
+
+
+def render_pdf_preview(uploaded_file, page_num: int = 0):
+    """Render a preview of a PDF page using PyPDF."""
+    try:
+        from pypdf import PdfReader
+        import io
+
+        # Read PDF
+        pdf_reader = PdfReader(io.BytesIO(uploaded_file.read()))
+
+        # Reset file pointer for later use
+        uploaded_file.seek(0)
+
+        total_pages = len(pdf_reader.pages)
+
+        if page_num >= total_pages:
+            page_num = 0
+
+        # Get page info
+        page = pdf_reader.pages[page_num]
+
+        # Extract page dimensions
+        width = float(page.mediabox.width)
+        height = float(page.mediabox.height)
+
+        # Display page info
+        st.markdown(f"""
+        **Page {page_num + 1} of {total_pages}**
+        Size: {width:.0f} x {height:.0f} pts
+        Orientation: {"Portrait" if height > width else "Landscape"}
+        """)
+
+        # Extract text preview (first 500 chars)
+        text = page.extract_text()[:500]
+        if text.strip():
+            with st.expander("Text Preview", expanded=False):
+                st.text(text)
+
+        return total_pages
+
+    except Exception as e:
+        st.error(f"Error rendering preview: {str(e)}")
+        return 0
+
+
+def reorder_files_ui(uploaded_files):
+    """UI component for drag-and-drop file reordering."""
+    if not uploaded_files or len(uploaded_files) <= 1:
+        return uploaded_files
+
+    st.markdown("##### 📋 File Processing Order")
+    st.markdown("*Reorder files by selecting and using arrows below*")
+
+    # Initialize file order if needed
+    if len(st.session_state.file_order) != len(uploaded_files):
+        st.session_state.file_order = list(range(len(uploaded_files)))
+
+    # Create ordered list based on current order
+    ordered_files = [uploaded_files[i] for i in st.session_state.file_order]
+
+    # Display files with reorder controls
+    for idx, file_idx in enumerate(st.session_state.file_order):
+        file = uploaded_files[file_idx]
+        col1, col2, col3, col4 = st.columns([0.5, 3, 0.5, 0.5])
+
+        with col1:
+            st.markdown(f"**{idx + 1}.**")
+
+        with col2:
+            st.markdown(f"{file.name} ({file.size / 1024:.1f} KB)")
+
+        with col3:
+            # Move up button
+            if idx > 0:
+                if st.button("⬆", key=f"up_{idx}_{file_idx}"):
+                    # Swap with previous
+                    st.session_state.file_order[idx], st.session_state.file_order[idx - 1] = \
+                        st.session_state.file_order[idx - 1], st.session_state.file_order[idx]
+                    st.rerun()
+
+        with col4:
+            # Move down button
+            if idx < len(st.session_state.file_order) - 1:
+                if st.button("⬇", key=f"down_{idx}_{file_idx}"):
+                    # Swap with next
+                    st.session_state.file_order[idx], st.session_state.file_order[idx + 1] = \
+                        st.session_state.file_order[idx + 1], st.session_state.file_order[idx]
+                    st.rerun()
+
+    return ordered_files
 
 
 def process_pdf(uploaded_file, config: dict, add_separator: bool = False, return_metadata: bool = False, numberer=None):
@@ -372,20 +620,113 @@ def main():
     # Sidebar - Configuration
     with st.sidebar:
         st.header("⚙️ Configuration")
-        
+
+        # Undo/Redo buttons
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            if st.button("↶ Undo", disabled=not can_undo(), use_container_width=True, help="Undo last change (Ctrl+Z)"):
+                restored_state = undo_state()
+                if restored_state:
+                    st.session_state.current_config = restored_state
+                    st.success("Undone!")
+                    st.rerun()
+        with col2:
+            if st.button("↷ Redo", disabled=not can_redo(), use_container_width=True, help="Redo last undone change (Ctrl+Y)"):
+                restored_state = redo_state()
+                if restored_state:
+                    st.session_state.current_config = restored_state
+                    st.success("Redone!")
+                    st.rerun()
+        with col3:
+            st.caption(f"History: {st.session_state.state_history_index + 1}/{len(st.session_state.state_history)}")
+
+        st.divider()
+
+        # Keyboard shortcuts legend
+        with st.expander("⌨️ Keyboard Shortcuts", expanded=False):
+            if KEYUP_AVAILABLE:
+                st.markdown("""
+                **Available Shortcuts:**
+                - `Ctrl+Z` - Undo
+                - `Ctrl+Y` - Redo
+                - `Ctrl+P` - Process PDFs
+                - `Ctrl+S` - Save Configuration
+                - `Ctrl+D` - Download Files
+                - `Ctrl+R` - Reset Settings
+                """)
+            else:
+                st.warning("Install `streamlit-keyup` to enable keyboard shortcuts: `pip install streamlit-keyup`")
+
+        st.divider()
+
         # Configuration presets
         preset = st.selectbox(
             "Configuration Preset",
             options=list(st.session_state.config_presets.keys()),
             help="Select a pre-configured template or use Default for custom settings"
         )
-        
+
         if preset != 'Default':
             preset_config = st.session_state.config_presets[preset]
             st.info(f"Using **{preset}** preset. Modify settings below to customize.")
         else:
             preset_config = st.session_state.config_presets['Default']
-        
+
+        # Processing History - Load previous configurations
+        with st.expander("📚 Processing History", expanded=False):
+            if st.session_state.processing_history:
+                st.markdown("**Recent Configurations:**")
+                for i, entry in enumerate(st.session_state.processing_history):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.text(f"{entry['name']}")
+                        st.caption(f"{entry['timestamp'][:19]}")
+                    with col2:
+                        if st.button("Load", key=f"load_history_{i}"):
+                            # Load this configuration
+                            loaded_config = load_config_from_history(entry)
+                            st.session_state.current_config = loaded_config
+                            st.success(f"Loaded: {entry['name']}")
+                            st.rerun()
+            else:
+                st.info("No processing history yet. Configurations will be saved automatically after processing.")
+
+            st.divider()
+
+            # Export/Import configuration
+            st.markdown("**Export/Import Configuration:**")
+
+            # Export current config
+            if st.session_state.current_config:
+                config_json = export_config_as_json(st.session_state.current_config)
+                st.download_button(
+                    label="📤 Export Config (JSON)",
+                    data=config_json,
+                    file_name=f"bates_config_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+
+            # Import config
+            uploaded_config = st.file_uploader(
+                "📥 Import Config (JSON)",
+                type=['json'],
+                help="Upload a previously exported configuration file"
+            )
+
+            if uploaded_config:
+                try:
+                    config_str = uploaded_config.read().decode('utf-8')
+                    imported_config = import_config_from_json(config_str)
+                    if imported_config:
+                        st.session_state.current_config = imported_config
+                        st.success("✅ Configuration imported successfully!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid configuration file")
+                except Exception as e:
+                    st.error(f"❌ Error importing config: {str(e)}")
+
         st.divider()
         
         # Basic Settings - Always visible
@@ -742,7 +1083,7 @@ def main():
                 "Include Date Stamp",
                 help="Add date/time below Bates number"
             )
-            
+
             if include_date:
                 date_format = st.text_input(
                     "Date Format",
@@ -751,13 +1092,13 @@ def main():
                 )
             else:
                 date_format = "%Y-%m-%d"
-            
+
             add_background = st.checkbox(
                 "White Background",
                 value=True,
                 help="Add white background behind text for better visibility"
             )
-            
+
             if add_background:
                 background_padding = st.slider(
                     "Background Padding",
@@ -768,7 +1109,80 @@ def main():
                 )
             else:
                 background_padding = 3
-    
+
+            st.divider()
+
+            # OCR Settings
+            if OCR_AVAILABLE:
+                st.markdown("##### 🔍 OCR Text Extraction")
+                enable_ocr = st.checkbox(
+                    "Enable OCR",
+                    help="Extract text from scanned PDFs and embed as metadata"
+                )
+
+                if enable_ocr:
+                    ocr_backend = st.selectbox(
+                        "OCR Backend",
+                        options=["pytesseract", "google_vision"],
+                        format_func=lambda x: "Local (Pytesseract - Privacy First)" if x == "pytesseract" else "Cloud (Google Vision - Premium)",
+                        help="Choose OCR backend: Local (free, private) or Cloud (premium, high accuracy)"
+                    )
+
+                    if ocr_backend == "google_vision":
+                        google_credentials = st.file_uploader(
+                            "Google Cloud Credentials (JSON)",
+                            type=['json'],
+                            help="Upload your Google Cloud Vision API credentials file"
+                        )
+                    else:
+                        google_credentials = None
+
+                    ocr_language = st.text_input(
+                        "OCR Language",
+                        value="eng",
+                        help="Language code (e.g., 'eng' for English, 'spa' for Spanish)"
+                    )
+                else:
+                    ocr_backend = None
+                    google_credentials = None
+                    ocr_language = "eng"
+            else:
+                st.info("📦 OCR features not installed. Install with:\n`pip install bates-labeler[ocr-local]` or `pip install bates-labeler[ocr-cloud]`")
+                enable_ocr = False
+                ocr_backend = None
+                google_credentials = None
+                ocr_language = "eng"
+
+        # Save current configuration state to history (at end of sidebar config)
+        current_state = {
+            'prefix': prefix,
+            'suffix': suffix,
+            'start_number': start_number,
+            'padding': padding,
+            'position': position,
+            'font_name': font_name,
+            'font_size': font_size,
+            'font_color': font_color,
+            'bold': bold,
+            'italic': italic,
+            'timestamp': datetime.now().isoformat()
+        }
+
+        # Check if state has changed (compare with last saved state)
+        if (not st.session_state.state_history or
+            current_state != st.session_state.state_history[st.session_state.state_history_index]):
+            # Only save if there's an actual change
+            if st.session_state.state_history:
+                last_state = st.session_state.state_history[st.session_state.state_history_index]
+                # Compare without timestamp
+                last_state_copy = {k: v for k, v in last_state.items() if k != 'timestamp'}
+                current_state_copy = {k: v for k, v in current_state.items() if k != 'timestamp'}
+                if last_state_copy != current_state_copy:
+                    save_state_to_history(current_state)
+            else:
+                # First state
+                save_state_to_history(current_state)
+
     # Main content area
     col1, col2 = st.columns([2, 1])
     
@@ -785,18 +1199,22 @@ def main():
         
         if uploaded_files:
             st.success(f"✅ {len(uploaded_files)} file(s) uploaded")
-            
-            # Display file names
-            with st.expander("📋 Uploaded Files", expanded=True):
-                for i, file in enumerate(uploaded_files, 1):
-                    st.text(f"{i}. {file.name} ({file.size / 1024:.1f} KB)")
+
+            # File reordering UI (for multiple files)
+            if len(uploaded_files) > 1:
+                with st.expander("📋 Uploaded Files - Reorder Processing Order", expanded=True):
+                    uploaded_files = reorder_files_ui(uploaded_files)
+            else:
+                # Display single file
+                with st.expander("📋 Uploaded Files", expanded=True):
+                    st.text(f"1. {uploaded_files[0].name} ({uploaded_files[0].size / 1024:.1f} KB)")
     
     with col2:
         st.subheader("👁️ Preview")
-        
-        # Generate and display preview
+
+        # Generate and display Bates number preview
         preview = generate_preview(prefix, start_number, padding, suffix)
-        
+
         st.markdown(f"""
         <div class="preview-box">
             <strong>Bates Number Format:</strong><br>
@@ -804,7 +1222,7 @@ def main():
             <small style="color: #666;">Next: {generate_preview(prefix, start_number + 1, padding, suffix)}</small>
         </div>
         """, unsafe_allow_html=True)
-        
+
         st.markdown(f"**Position:** {position}")
         st.markdown(f"**Font:** {font_name} {font_size}pt")
         st.markdown(f"**Color:** {font_color}")
@@ -815,6 +1233,39 @@ def main():
             if italic:
                 style.append("Italic")
             st.markdown(f"**Style:** {', '.join(style)}")
+
+        # PDF Page Preview (if files uploaded)
+        if uploaded_files:
+            st.divider()
+            st.markdown("##### 📄 PDF Preview")
+
+            # File selector for preview
+            if len(uploaded_files) > 1:
+                preview_file = st.selectbox(
+                    "Select file to preview",
+                    options=range(len(uploaded_files)),
+                    format_func=lambda i: uploaded_files[i].name,
+                    key="preview_file_selector"
+                )
+            else:
+                preview_file = 0
+
+            # Page navigation
+            file_to_preview = uploaded_files[preview_file]
+            total_pages = render_pdf_preview(file_to_preview, st.session_state.preview_file_index)
+
+            if total_pages > 1:
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col1:
+                    if st.button("◀ Prev", disabled=st.session_state.preview_file_index == 0):
+                        st.session_state.preview_file_index -= 1
+                        st.rerun()
+                with col2:
+                    st.markdown(f"<center>Page {st.session_state.preview_file_index + 1} / {total_pages}</center>", unsafe_allow_html=True)
+                with col3:
+                    if st.button("Next ▶", disabled=st.session_state.preview_file_index >= total_pages - 1):
+                        st.session_state.preview_file_index += 1
+                        st.rerun()
     
     st.divider()
     
@@ -845,13 +1296,22 @@ def main():
             progress_container = st.empty()
             cancel_container = st.empty()
             
-            # Status callback function
+            # Status callback function with per-file progress tracking
             def status_callback(message, progress_dict=None):
                 st.session_state.processing_status = message
                 status_container.info(f"⚙️ {message}")
+
+                # Update overall progress
                 if progress_dict and 'current' in progress_dict and 'total' in progress_dict:
-                    progress = progress_dict['current'] / progress_dict['total']
-                    progress_container.progress(progress)
+                    overall_progress = progress_dict['current'] / progress_dict['total']
+                    progress_container.progress(overall_progress)
+
+                    # Track individual file progress
+                    if 'file_name' in progress_dict:
+                        st.session_state.file_progress[progress_dict['file_name']] = {
+                            'status': 'processing',
+                            'progress': progress_dict.get('file_progress', 0)
+                        }
             
             # Cancel callback function  
             def cancel_callback():
@@ -862,6 +1322,14 @@ def main():
                 st.session_state.cancel_requested = True
                 status_container.warning("⚠️ Cancellation requested...")
             
+            # Initialize file progress tracking
+            st.session_state.file_progress = {}
+            for file in uploaded_files:
+                st.session_state.file_progress[file.name] = {
+                    'status': 'pending',
+                    'progress': 0
+                }
+
             # Build configuration for BatesNumberer (constructor parameters only)
             numberer_config = {
                 'prefix': prefix,
@@ -993,21 +1461,54 @@ def main():
             
             # Option 3: Standard processing (original behavior)
             else:
+                # Create container for individual file progress bars
+                file_progress_container = st.container()
+
+                with file_progress_container:
+                    st.markdown("#### 📊 File Processing Progress")
+                    file_progress_bars = {}
+                    file_status_texts = {}
+
+                    for file in uploaded_files:
+                        col1, col2 = st.columns([2, 1])
+                        with col1:
+                            file_status_texts[file.name] = st.empty()
+                            file_status_texts[file.name].text(f"⏳ {file.name}: Waiting...")
+                        with col2:
+                            file_progress_bars[file.name] = st.empty()
+
                 for i, uploaded_file in enumerate(uploaded_files):
+                    # Update file status
+                    file_status_texts[uploaded_file.name].text(f"🔄 {uploaded_file.name}: Processing...")
+
                     status_callback(f"Processing {uploaded_file.name}...", {
                         'current': i + 1,
-                        'total': len(uploaded_files)
+                        'total': len(uploaded_files),
+                        'file_name': uploaded_file.name,
+                        'file_progress': 0.5
                     })
-                    
+
+                    # Show progress bar for this file
+                    file_progress_bars[uploaded_file.name].progress(0.5)
+
                     # Process the file
                     output_data = process_pdf(uploaded_file, numberer_config, add_separator)
-                    
+
                     if output_data:
                         st.session_state.processed_files.append({
                             'name': uploaded_file.name.replace('.pdf', '_bates.pdf'),
                             'data': output_data
                         })
-                
+                        # Mark as complete
+                        file_status_texts[uploaded_file.name].text(f"✅ {uploaded_file.name}: Complete")
+                        file_progress_bars[uploaded_file.name].progress(1.0)
+                        st.session_state.file_progress[uploaded_file.name]['status'] = 'complete'
+                    else:
+                        # Mark as failed
+                        file_status_texts[uploaded_file.name].text(f"❌ {uploaded_file.name}: Failed")
+                        file_progress_bars[uploaded_file.name].progress(0.0)
+                        st.session_state.file_progress[uploaded_file.name]['status'] = 'failed'
+
                 status_callback("Processing complete!")
                 progress_container.progress(1.0)
             
@@ -1016,12 +1517,17 @@ def main():
             progress_container.empty()
             cancel_container.empty()
             
+            # Save configuration to history
+            st.session_state.current_config = numberer_config.copy()
+            save_config_to_history(numberer_config)
+
             # Show success message
             if st.session_state.processed_files:
                 st.markdown(f"""
                 <div class="success-box">
                     <strong>✅ Success!</strong><br>
-                    Processed {len(st.session_state.processed_files)} file(s) successfully.
+                    Processed {len(st.session_state.processed_files)} file(s) successfully.<br>
+                    <small>Configuration saved to history.</small>
                 </div>
                 """, unsafe_allow_html=True)
     

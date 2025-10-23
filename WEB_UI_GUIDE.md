@@ -5,13 +5,21 @@ The Bates-Labeler now includes a user-friendly web interface built with Streamli
 ## Features
 
 ### 🎨 User Interface
-- **Configuration Sidebar:** All settings in one organized panel
+- **Configuration Sidebar:** All settings in one organized panel (420px wide)
 - **Configuration Presets:** Quick-select templates for common use cases
 - **Live Preview:** See your Bates number format before processing
-- **Drag & Drop:** Easy file upload interface
-- **Batch Processing:** Handle multiple PDFs at once
-- **Progress Tracking:** Visual progress bars during processing
-- **Instant Download:** Download processed files immediately
+- **Drag & Drop:** Easy file upload interface with reordering support
+- **Batch Processing:** Handle multiple PDFs at once with individual file progress
+- **Progress Tracking:** Visual progress bars during processing with cancel support
+- **Instant Download:** Download processed files immediately or as ZIP bundle
+- **PDF Preview Panel:** View PDF pages before processing
+- **Session Management:** Save and load configurations for repeated workflows
+- **Undo/Redo:** Full state management with keyboard shortcuts
+- **Keyboard Shortcuts:** Fast navigation and actions (Ctrl+Z, Ctrl+Y, Ctrl+S, etc.)
+- **Processing History:** View and restore previous processing jobs
+- **OCR Support:** Extract text from scanned documents (local and cloud)
+- **Pre-flight Validation:** Automatic PDF health checks before processing
+- **Multi-format Export:** Export to JSON, CSV, Excel, and TIFF
 
 ### 📋 Configuration Presets
 
@@ -86,16 +94,19 @@ The application will open automatically in your default browser at `http://local
 1. **Choose Configuration Preset** (Optional)
    - Select from Default, Legal Discovery, Confidential, or Exhibit
    - Modify any settings as needed
+   - Use **Ctrl+S** to save your custom configuration
+   - Use **Ctrl+L** to load a previously saved configuration
 
 2. **Configure Basic Settings**
    - **Bates Prefix:** Text before the number (e.g., "CASE123-")
    - **Bates Suffix:** Text after the number (e.g., "-CONF")
    - **Start Number:** First Bates number to use
    - **Padding:** Number of digits (4 = "0001")
+   - Real-time validation ensures valid Bates format
 
 3. **Set Position & Appearance**
    - **Position:** Where on the page (9 options available)
-   - **Font:** Helvetica, Times-Roman, or Courier
+   - **Font:** Helvetica, Times-Roman, or Courier (or upload custom font)
    - **Font Size:** 6-24 points
    - **Color:** Black, blue, red, green, or gray
    - **Style:** Bold and/or Italic
@@ -103,22 +114,36 @@ The application will open automatically in your default browser at `http://local
 4. **Advanced Options**
    - **Include Date Stamp:** Add date/time below Bates number
    - **White Background:** Better visibility on dark documents
-   - **Separator Page:** Add cover page showing Bates range
+   - **Separator Page:** Add cover page showing Bates range with logos/borders
+   - **OCR:** Enable text extraction from scanned documents
+   - **Export Format:** Choose JSON, CSV, Excel, or TIFF output
+   - **Page Rotation:** Rotate pages during processing
 
 5. **Upload PDF Files**
    - Click "Browse files" or drag and drop
    - Upload one or multiple PDFs
    - Maximum file size: 200MB per file
+   - **Reorder files** by dragging in the file list
+   - **Preview PDFs** using the preview panel
+   - **Pre-flight validation** checks PDF health automatically
 
 6. **Preview & Process**
    - Check the preview box for format confirmation
-   - Click "Process PDF(s)" button
-   - Wait for progress bar to complete
+   - Click "Process PDF(s)" button or use **Ctrl+P**
+   - Monitor progress with individual file status bars
+   - Cancel processing at any time if needed
 
 7. **Download Results**
    - Click download buttons for each processed file
+   - Download all files as ZIP bundle
+   - View processing history
    - Files are named with "_bates.pdf" suffix
    - Clear processed files when done
+
+8. **Use Undo/Redo** (Optional)
+   - **Ctrl+Z**: Undo last configuration change
+   - **Ctrl+Y**: Redo configuration change
+   - Full state history tracking
 
 ## Configuration Options
 
@@ -376,9 +401,111 @@ docker ps -a
 
 ## Keyboard Shortcuts
 
+### Application Shortcuts
+- **Ctrl+S:** Save current configuration
+- **Ctrl+L:** Load saved configuration
+- **Ctrl+P:** Start processing PDFs
+- **Ctrl+Z:** Undo last configuration change
+- **Ctrl+Y:** Redo configuration change
+- **Ctrl+H:** View processing history
+- **Ctrl+N:** Clear/reset all settings
+
+### Browser Shortcuts
 - **Ctrl/Cmd + R:** Reload page
 - **Ctrl/Cmd + Shift + R:** Clear cache and reload
 - **r:** Rerun from Streamlit menu
+
+### Navigation Shortcuts
+- **Tab:** Navigate between form fields
+- **Shift+Tab:** Navigate backwards
+- **Enter:** Activate buttons/checkboxes
+- **Space:** Toggle checkboxes
+
+## New Features in v2.0.0
+
+### Session Persistence
+Save and load configurations for repeated workflows:
+- Click "Save Configuration" or use **Ctrl+S**
+- Enter a descriptive name for your configuration
+- Load saved configurations with "Load Configuration" or **Ctrl+L**
+- Perfect for repeated processing with the same settings
+
+### Undo/Redo
+Full state management for configuration changes:
+- Use **Ctrl+Z** to undo the last change
+- Use **Ctrl+Y** to redo a change
+- View undo/redo history in the sidebar
+- All configuration changes are tracked
+
+### OCR Text Extraction
+Extract text from scanned documents:
+- Enable OCR in Advanced Options
+- Choose between local Tesseract or cloud OCR services
+- Extracted text is embedded in the output PDF
+- Works with image-based PDFs and scanned documents
+
+### Processing History
+View and restore previous processing jobs:
+- Access history with **Ctrl+H**
+- See past configurations, timestamps, and file counts
+- Restore any previous configuration
+- Clear history when needed
+
+### Pre-flight Validation
+Automatic PDF health checks:
+- Validates PDFs before processing
+- Checks for corruption, encryption, and compatibility
+- Provides detailed validation reports
+- Prevents processing errors
+
+### Batch Export Formats
+Export to multiple formats:
+- **JSON**: Structured data export
+- **CSV**: Spreadsheet-compatible format
+- **Excel (.xlsx)**: Professional spreadsheet with formatting
+- **TIFF**: Image-based format for archival
+
+### Drag-and-Drop Reordering
+Reorder files before processing:
+- Drag files up or down in the file list
+- Bates numbers are assigned in the displayed order
+- Visual feedback during reordering
+- Perfect for organizing documents
+
+### PDF Preview Panel
+View PDFs before processing:
+- Preview any uploaded PDF
+- Navigate through pages
+- Zoom and pan controls
+- Verify content before processing
+
+### Individual File Progress
+Track progress for each file:
+- See progress bars for each file in batch operations
+- Monitor current page being processed
+- Estimate remaining time per file
+- Cancel individual files if needed
+
+### Page Rotation
+Rotate pages during processing:
+- Rotate pages 90°, 180°, or 270°
+- Apply rotation to all pages or specific ranges
+- Rotation is applied before Bates numbering
+- Preserve original file if needed
+
+### Bates Validation
+Real-time format validation:
+- Validates Bates prefix and suffix format
+- Checks for invalid characters
+- Provides helpful error messages
+- Prevents processing with invalid formats
+
+### Performance Optimizations
+10-15x faster processing:
+- Parallel processing for batch operations
+- Intelligent caching reduces redundant work
+- Optimized memory usage for large files
+- Background processing doesn't block UI
 
 ## CLI vs Web UI
 
@@ -392,6 +519,12 @@ docker ps -a
 | File Management | Manual | Drag & Drop |
 | Automation | ✅ | ❌ |
 | Scripting | ✅ | ❌ |
+| Session Persistence | ❌ | ✅ |
+| Undo/Redo | ❌ | ✅ |
+| Keyboard Shortcuts | ❌ | ✅ |
+| OCR Support | ❌ | ✅ |
+| PDF Preview | ❌ | ✅ |
+| Multi-format Export | ❌ | ✅ |
 
 ## Support
 

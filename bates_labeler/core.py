@@ -4,9 +4,11 @@ import os
 import csv
 import io
 import zipfile
+import tempfile
 from datetime import datetime
 from typing import Tuple, Optional, List, Dict
 import getpass
+import time
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
@@ -317,23 +319,24 @@ class BatesNumberer:
             # Handle raster formats (PNG, JPG, WEBP)
             elif file_ext in ['.png', '.jpg', '.jpeg', '.webp']:
                 img = Image.open(logo_path)
-                
+
                 # Get original dimensions in points (assuming 72 DPI)
                 width_pts = img.width * 72 / img.info.get('dpi', (72, 72))[0]
                 height_pts = img.height * 72 / img.info.get('dpi', (72, 72))[1]
-                
+
                 # Scale to fit within max dimensions
                 scale_x = self.logo_max_width / width_pts if width_pts > 0 else 1
                 scale_y = self.logo_max_height / height_pts if height_pts > 0 else 1
                 scale = min(scale_x, scale_y, 1.0)
-                
-                # Save to temporary file for reportlab
-                temp_img_path = f"temp_logo{file_ext}"
-                img.save(temp_img_path)
-                
+
+                # Store image in-memory buffer instead of temp file
+                buffer = io.BytesIO()
+                img.save(buffer, format=img.format or 'PNG')
+                buffer.seek(0)
+
                 return {
                     'type': 'raster',
-                    'data': temp_img_path,
+                    'data': buffer,
                     'width': width_pts * scale,
                     'height': height_pts * scale,
                     'original_path': logo_path
@@ -346,15 +349,15 @@ class BatesNumberer:
             print(f"Error loading logo: {str(e)}")
             return None
     
-    def _create_qr_code(self, data: str) -> Optional[str]:
+    def _create_qr_code(self, data: str) -> Optional[io.BytesIO]:
         """
-        Generate a QR code image.
-        
+        Generate a QR code image in-memory.
+
         Args:
             data: Data to encode in QR code
-            
+
         Returns:
-            Path to temporary QR code image file or None if failed
+            BytesIO buffer containing QR code image or None if failed
         """
         try:
             qr = qrcode.QRCode(
@@ -365,16 +368,17 @@ class BatesNumberer:
             )
             qr.add_data(data)
             qr.make(fit=True)
-            
+
             # Use configurable colors
             img = qr.make_image(fill_color=self.qr_color, back_color=self.qr_background_color)
-            
-            # Save to temporary file
-            temp_path = f"temp_qr_{abs(hash(data))}.png"
-            img.save(temp_path)
-            
-            return temp_path
-            
+
+            # Save to in-memory buffer
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG')
+            buffer.seek(0)
+
+            return buffer
+
         except Exception as e:
             print(f"Error creating QR code: {str(e)}")
             return None
@@ -500,8 +504,8 @@ class BatesNumberer:
     def _draw_qr_on_canvas(self, c: canvas.Canvas, page_width: float, page_height: float,
                           qr_data: str) -> None:
         """
-        Draw QR code on canvas.
-        
+        Draw QR code on canvas using in-memory buffer.
+
         Args:
             c: ReportLab canvas object
             page_width: Page width in points
@@ -509,10 +513,10 @@ class BatesNumberer:
             qr_data: Data to encode in QR code
         """
         try:
-            qr_path = self._create_qr_code(qr_data)
-            if not qr_path:
+            qr_buffer = self._create_qr_code(qr_data)
+            if not qr_buffer:
                 return
-            
+
             # Calculate position based on qr_position
             if self.qr_position in POSITION_COORDINATES:
                 x, y = POSITION_COORDINATES[self.qr_position]
@@ -520,38 +524,38 @@ class BatesNumberer:
                 y = y * inch
             else:
                 x, y = 0.5 * inch, 0.5 * inch
-            
+
             # Adjust position based on page size
             if 'right' in self.qr_position:
                 x = page_width - self.qr_size - (0.5 * inch)
             elif 'center' in self.qr_position:
                 x = (page_width - self.qr_size) / 2
-            
+
             if 'top' in self.qr_position:
                 y = page_height - self.qr_size - (0.5 * inch)
-            
-            # Draw QR code
-            c.drawImage(qr_path, x, y, width=self.qr_size, height=self.qr_size)
-            
-            # Clean up temp file
-            if os.path.exists(qr_path):
-                os.remove(qr_path)
-                
+
+            # Draw QR code from buffer
+            c.drawImage(qr_buffer, x, y, width=self.qr_size, height=self.qr_size)
+
         except Exception as e:
             print(f"Error drawing QR code: {str(e)}")
     
     def create_watermark_overlay(self, page_width: float, page_height: float,
-                                output_path: str) -> None:
+                                output_path: Optional[str] = None) -> io.BytesIO:
         """
         Create a PDF overlay with watermark.
-        
+
         Args:
             page_width: Width of the page in points
             page_height: Height of the page in points
-            output_path: Path to save the watermark overlay PDF
+            output_path: DEPRECATED - kept for backward compatibility but ignored
+
+        Returns:
+            BytesIO buffer containing the watermark overlay PDF
         """
         try:
-            c = canvas.Canvas(output_path, pagesize=(page_width, page_height))
+            buffer = io.BytesIO()
+            c = canvas.Canvas(buffer, pagesize=(page_width, page_height))
             
             # Set transparency
             c.setFillAlpha(self.watermark_opacity)
@@ -585,11 +589,15 @@ class BatesNumberer:
                     x, y = page_width / 2, page_height / 2
                 
                 c.drawString(x, y, self.watermark_text)
-            
+
             c.save()
-            
+            buffer.seek(0)
+            return buffer
+
         except Exception as e:
             print(f"Error creating watermark: {str(e)}")
+            # Return empty buffer on error
+            return io.BytesIO()
     
     def get_next_bates_number(self) -> str:
         """Generate the next Bates number in sequence."""
@@ -603,20 +611,24 @@ class BatesNumberer:
         return bates_number
     
     def create_separator_page(self, page_width: float, page_height: float,
-                            first_bates: str, last_bates: str, output_path: str,
-                            document_name: Optional[str] = None) -> None:
+                            first_bates: str, last_bates: str, output_path: Optional[str] = None,
+                            document_name: Optional[str] = None) -> io.BytesIO:
         """
         Create a separator page with Bates range information.
-        
+
         Args:
             page_width: Width of the page in points
-            page_height: Height of the page in points  
+            page_height: Height of the page in points
             first_bates: First Bates number in the document
             last_bates: Last Bates number in the document
-            output_path: Path to save the separator page PDF
+            output_path: DEPRECATED - kept for backward compatibility but ignored
             document_name: Optional document name (kept for backward compatibility but not displayed)
+
+        Returns:
+            BytesIO buffer containing the separator page PDF
         """
-        c = canvas.Canvas(output_path, pagesize=(page_width, page_height))
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=(page_width, page_height))
         
         # Draw border if enabled
         self._draw_border(c, page_width, page_height)
@@ -645,8 +657,10 @@ class BatesNumberer:
         # Draw QR code if enabled and placement is separator_only
         if self.enable_qr and self.qr_placement == "separator_only":
             self._draw_qr_on_canvas(c, page_width, page_height, first_bates)
-        
+
         c.save()
+        buffer.seek(0)
+        return buffer
     
     def create_index_page(self, documents: List[Dict], output_path: str,
                          page_width: float = 612, page_height: float = 792) -> None:
@@ -721,18 +735,23 @@ class BatesNumberer:
         except Exception as e:
             print(f"Error creating index page: {str(e)}")
     
-    def create_bates_overlay(self, page_width: float, page_height: float, 
-                           bates_number: str, output_path: str) -> None:
+    def create_bates_overlay(self, page_width: float, page_height: float,
+                           bates_number: str, output_path: Optional[str] = None) -> io.BytesIO:
         """
         Create a PDF overlay with the Bates number.
-        
+
         Args:
             page_width: Width of the page in points
             page_height: Height of the page in points
             bates_number: The Bates number to apply
-            output_path: Path to save the overlay PDF
+            output_path: DEPRECATED - kept for backward compatibility but ignored
+
+        Returns:
+            BytesIO buffer containing the overlay PDF
         """
-        c = canvas.Canvas(output_path, pagesize=(page_width, page_height))
+        # Use in-memory buffer instead of file I/O
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=(page_width, page_height))
         
         # Set font
         c.setFont(self.font_name, self.font_size)
@@ -800,8 +819,10 @@ class BatesNumberer:
         # Draw QR code if enabled and placement is all_pages
         if self.enable_qr and self.qr_placement == "all_pages":
             self._draw_qr_on_canvas(c, page_width, page_height, bates_number)
-        
+
         c.save()
+        buffer.seek(0)
+        return buffer
     
     def process_pdf(self, input_path: str, output_path: str, 
                    password: Optional[str] = None,
@@ -877,25 +898,20 @@ class BatesNumberer:
                 first_bates_number = f"{self.prefix}{str(self.current_number).zfill(self.padding)}{self.suffix}"
                 last_number = self.current_number + total_pages - 1
                 last_bates_number = f"{self.prefix}{str(last_number).zfill(self.padding)}{self.suffix}"
-                
+
                 # Get page dimensions from first page
                 first_page = reader.pages[0]
                 page_width = float(first_page.mediabox.width)
                 page_height = float(first_page.mediabox.height)
-                
-                # Create separator page
+
+                # Create separator page (in-memory)
                 print("Adding separator page...")
-                separator_path = "temp_separator.pdf"
-                self.create_separator_page(page_width, page_height, 
-                                         first_bates_number, last_bates_number, 
-                                         separator_path)
-                
+                separator_buffer = self.create_separator_page(page_width, page_height,
+                                                              first_bates_number, last_bates_number)
+
                 # Add separator page to writer
-                separator_reader = PdfReader(separator_path)
+                separator_reader = PdfReader(separator_buffer)
                 writer.add_page(separator_reader.pages[0])
-                
-                # Clean up temp file
-                os.remove(separator_path)
             
             # Process each page with progress bar
             for page_num in tqdm(range(total_pages), desc="Adding Bates numbers", disable=bool(self.status_callback)):
@@ -936,15 +952,13 @@ class BatesNumberer:
                             'current': page_num + 1,
                             'total': total_pages
                         })
-                    
-                    watermark_path = f"temp_watermark_{page_num}.pdf"
-                    self.create_watermark_overlay(page_width, page_height, watermark_path)
-                    
-                    watermark_reader = PdfReader(watermark_path)
+
+                    # Create watermark in-memory
+                    watermark_buffer = self.create_watermark_overlay(page_width, page_height)
+                    watermark_reader = PdfReader(watermark_buffer)
                     watermark_page = watermark_reader.pages[0]
                     page.merge_page(watermark_page)
-                    os.remove(watermark_path)
-                
+
                 # Status update for Bates numbering
                 if self.status_callback:
                     self.status_callback(f"Adding Bates number {bates_number}", {
@@ -953,22 +967,17 @@ class BatesNumberer:
                         'total': total_pages,
                         'bates': bates_number
                     })
-                
-                # Create overlay
-                overlay_path = f"temp_overlay_{page_num}.pdf"
-                self.create_bates_overlay(page_width, page_height, 
-                                        bates_number, overlay_path)
-                
-                # Read overlay
-                overlay_reader = PdfReader(overlay_path)
+
+                # Create overlay in-memory (OPTIMIZED: no disk I/O)
+                overlay_buffer = self.create_bates_overlay(page_width, page_height, bates_number)
+
+                # Read overlay from buffer
+                overlay_reader = PdfReader(overlay_buffer)
                 overlay_page = overlay_reader.pages[0]
-                
+
                 # Merge overlay with original page
                 page.merge_page(overlay_page)
                 writer.add_page(page)
-                
-                # Clean up temp file
-                os.remove(overlay_path)
             
             # Copy metadata
             if reader.metadata:
@@ -1094,36 +1103,32 @@ class BatesNumberer:
                     first_page = reader.pages[0]
                     page_width = float(first_page.mediabox.width)
                     page_height = float(first_page.mediabox.height)
-                    
-                    separator_path = f"temp_doc_separator_{file_idx}.pdf"
-                    self.create_separator_page(
+
+                    # Create separator in-memory
+                    separator_buffer = self.create_separator_page(
                         page_width, page_height,
                         first_bates, last_bates,
-                        separator_path,
                         document_name=os.path.basename(input_path)
                     )
-                    
-                    separator_reader = PdfReader(separator_path)
+
+                    separator_reader = PdfReader(separator_buffer)
                     writer.add_page(separator_reader.pages[0])
-                    os.remove(separator_path)
-                
+
                 # Process each page
                 for page in reader.pages:
                     page_width = float(page.mediabox.width)
                     page_height = float(page.mediabox.height)
-                    
+
                     bates_number = self.get_next_bates_number()
-                    
-                    overlay_path = f"temp_combine_overlay_{total_pages}.pdf"
-                    self.create_bates_overlay(page_width, page_height, bates_number, overlay_path)
-                    
-                    overlay_reader = PdfReader(overlay_path)
+
+                    # Create overlay in-memory
+                    overlay_buffer = self.create_bates_overlay(page_width, page_height, bates_number)
+                    overlay_reader = PdfReader(overlay_buffer)
                     overlay_page = overlay_reader.pages[0]
-                    
+
                     page.merge_page(overlay_page)
                     writer.add_page(page)
-                    os.remove(overlay_path)
-                    
+
                     total_pages += 1
                 
                 # Track document metadata
@@ -1138,29 +1143,29 @@ class BatesNumberer:
             # Add index page at the beginning if requested
             if add_index_page and all_documents:
                 print("Creating index page...")
-                index_path = "temp_index.pdf"
-                # Use letter size for index page
-                self.create_index_page(all_documents, index_path)
-                
-                # Read index page
-                index_reader = PdfReader(index_path)
-                
-                # Create a new writer with index page first
-                new_writer = PdfWriter()
-                
-                # Add index page
-                for page in index_reader.pages:
-                    new_writer.add_page(page)
-                
-                # Add all existing pages from the original writer
-                for page_num in range(len(writer.pages)):
-                    new_writer.add_page(writer.pages[page_num])
-                
-                # Replace writer with new_writer
-                writer = new_writer
-                
-                # Clean up temp file
-                os.remove(index_path)
+                # Create index page in-memory using NamedTemporaryFile for context management
+                with tempfile.NamedTemporaryFile(delete=True, suffix='.pdf') as tmp:
+                    index_path = tmp.name
+                    # Use letter size for index page
+                    self.create_index_page(all_documents, index_path)
+
+                    # Read index page
+                    index_reader = PdfReader(index_path)
+
+                    # Create a new writer with index page first
+                    new_writer = PdfWriter()
+
+                    # Add index page
+                    for page in index_reader.pages:
+                        new_writer.add_page(page)
+
+                    # Add all existing pages from the original writer
+                    for page_num in range(len(writer.pages)):
+                        new_writer.add_page(writer.pages[page_num])
+
+                    # Replace writer with new_writer
+                    writer = new_writer
+                    # Temp file auto-cleaned by context manager
             
             # Write combined output
             print(f"Writing combined PDF to: {output_path}")

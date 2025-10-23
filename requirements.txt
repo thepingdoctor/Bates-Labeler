@@ -1,0 +1,28 @@
+# Bates-Labeler Dependencies
+# Auto-generated from pyproject.toml for pip users
+
+# Core Dependencies
+pypdf>=4.0.0
+reportlab>=4.0.7
+tqdm>=4.66.1
+streamlit>=1.28.0
+streamlit-keyup>=0.2.0
+Pillow>=10.0.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+
+# Optional: OCR Support (Local)
+# Uncomment to enable local OCR with Tesseract
+# pytesseract>=0.3.10
+# pdf2image>=1.16.0
+
+# Optional: OCR Support (Cloud - Google Vision)
+# Uncomment to enable cloud OCR
+# google-cloud-vision>=3.4.0
+
+# Development Dependencies (optional)
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+# black>=23.9.0
+# flake8>=6.1.0
+# mypy>=1.5.0

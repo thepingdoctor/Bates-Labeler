@@ -55,6 +55,17 @@ streamlit = "^1.28.0"
 qrcode = "^7.4.2"
 Pillow = "^10.0.0"
 svglib = "^1.5.1"
+streamlit-keyup = "^0.2.0"
+
+# Optional OCR dependencies
+pytesseract = {version = "^0.3.10", optional = true}
+pdf2image = {version = "^1.16.0", optional = true}
+google-cloud-vision = {version = "^3.4.0", optional = true}
+
+[tool.poetry.extras]
+ocr-local = ["pytesseract", "pdf2image"]
+ocr-cloud = ["google-cloud-vision", "pdf2image"]
+ocr-all = ["pytesseract", "pdf2image", "google-cloud-vision"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

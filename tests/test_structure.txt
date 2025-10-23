@@ -1,0 +1,140 @@
+Bates-Labeler Test Suite Structure
+===================================
+
+tests/
+├── __init__.py                    # Package marker
+├── conftest.py                    # Pytest configuration (slow test markers)
+├── README.md                      # Comprehensive test documentation (10KB)
+├── TEST_SUMMARY.md                # This test suite summary
+│
+├── test_bates_numberer.py         # EXISTING - Core unit tests (11 tests)
+│   ├── TestBatesNumberer          # Basic initialization & number generation
+│   ├── test_version()             # Version checking
+│   └── test_module_imports()      # Import validation
+│
+├── test_core_advanced.py          # NEW - Advanced features (34 tests)
+│   ├── TestLogoFeatures           # Logo upload, placement, sizing
+│   ├── TestQRCodeFeatures         # QR code generation & positioning
+│   ├── TestWatermarkFeatures      # Watermark rendering & opacity
+│   ├── TestBorderFeatures         # Border styles & colors
+│   ├── TestCustomFontFeatures     # Custom font registration
+│   ├── TestCallbackFeatures       # Status & cancel callbacks
+│   ├── TestColorParsing           # Named & hex color parsing
+│   ├── TestDateTimestamp          # Date/time stamping
+│   └── TestBackgroundPadding      # Text background controls
+│
+├── test_pdf_processing.py         # NEW - Integration tests (17 test classes)
+│   ├── TestPDFProcessing          # Basic PDF operations
+│   │   ├── process_simple_pdf
+│   │   ├── process_with_separator_page
+│   │   ├── process_with_metadata_return
+│   │   ├── process_encrypted_pdf_with_password
+│   │   ├── process_encrypted_pdf_wrong_password
+│   │   ├── continuous_numbering_across_pdfs
+│   │   └── different_page_sizes
+│   ├── TestBatchProcessing        # Multi-file processing
+│   │   ├── batch_processing_basic
+│   │   ├── batch_with_separator_pages
+│   │   └── batch_continuous_numbering
+│   ├── TestPDFCombination         # PDF merging workflows
+│   │   ├── combine_pdfs_basic
+│   │   ├── combine_with_document_separators
+│   │   ├── combine_with_index_page
+│   │   ├── combine_with_separators_and_index
+│   │   └── combine_metadata_tracking
+│   └── TestFilenameMappingGeneration
+│       ├── generate_csv_mapping
+│       └── generate_pdf_mapping
+│
+├── test_edge_cases.py             # NEW - Edge cases & errors (24 tests)
+│   ├── TestEdgeCases              # Boundary conditions
+│   │   ├── empty_prefix_and_suffix
+│   │   ├── very_long_prefix/suffix
+│   │   ├── maximum/minimum_padding
+│   │   ├── large_start_number
+│   │   ├── number_exceeding_padding
+│   │   ├── single_page_pdf
+│   │   ├── very_large_pdf (100 pages)
+│   │   ├── special_characters_in_prefix
+│   │   ├── unicode_characters_in_prefix
+│   │   ├── empty_batch_list
+│   │   └── nonexistent_file_in_batch
+│   ├── TestErrorHandling          # Error recovery
+│   │   ├── nonexistent_input_file
+│   │   ├── invalid_output_directory
+│   │   ├── corrupted_pdf_handling
+│   │   ├── invalid_position_fallback
+│   │   ├── invalid_hex_color
+│   │   └── callback_exception_handling
+│   ├── TestCancellation           # Processing cancellation
+│   │   ├── cancellation_before_processing
+│   │   └── cancellation_mid_processing
+│   └── TestMemoryManagement       # Resource cleanup
+│       ├── temporary_file_cleanup
+│       ├── qr_code_cleanup
+│       └── multiple_operations_no_memory_leak
+│
+├── test_performance.py            # NEW - Performance benchmarks (11 tests)
+│   ├── TestPerformance            # @pytest.mark.slow
+│   │   ├── process_100_page_document (<60s target)
+│   │   ├── process_500_page_document (<300s target)
+│   │   ├── batch_processing_speed (20 files)
+│   │   ├── combine_many_pdfs_performance (50 PDFs)
+│   │   ├── memory_usage_large_document (tracemalloc)
+│   │   ├── sequential_numbering_performance (10k numbers)
+│   │   ├── overlay_creation_performance (100 overlays)
+│   │   ├── qr_code_generation_performance (100 QR codes)
+│   │   └── complex_features_performance (all features)
+│   └── TestScalability
+│       ├── scalability_increasing_pages (10→200 pages)
+│       └── concurrent_numberer_instances
+│
+└── test_cli.py                    # NEW - CLI interface tests (22 tests)
+    ├── TestCLI                    # Command-line interface
+    │   ├── cli_version
+    │   ├── cli_basic_processing
+    │   ├── cli_with_separator
+    │   ├── cli_custom_position
+    │   ├── cli_custom_font_settings
+    │   ├── cli_with_date_stamp
+    │   ├── cli_no_background
+    │   ├── cli_batch_processing
+    │   ├── cli_combine_pdfs
+    │   ├── cli_combine_with_separators
+    │   ├── cli_combine_with_index
+    │   ├── cli_bates_filenames
+    │   ├── cli_custom_padding
+    │   ├── cli_nonexistent_input
+    │   └── cli_help
+    ├── TestCLIEdgeCases           # CLI edge cases
+    │   ├── cli_empty_prefix_suffix
+    │   ├── cli_special_characters_in_prefix
+    │   ├── cli_very_large_start_number
+    │   ├── cli_minimum_padding
+    │   └── cli_maximum_font_size
+    └── TestCLIIntegration         # Complete workflows
+        ├── complete_legal_workflow
+        └── batch_with_continuous_numbering
+
+STATISTICS
+==========
+Total Files: 8 (6 new test modules + 2 existing/config)
+Total Test Methods: 119
+Total Lines of Test Code: 2,263
+Total Test Classes: 20+
+Documentation: 10KB+ (README + summary)
+
+EXECUTION
+=========
+Fast tests (default):    pytest tests/ -v
+All tests (with slow):   pytest tests/ -v --runslow
+Coverage report:         pytest tests/ --cov=bates_labeler --cov-report=term-missing
+Specific file:           pytest tests/test_core_advanced.py -v
+Specific test:           pytest tests/test_pdf_processing.py::TestPDFProcessing::test_process_simple_pdf -v
+
+COVERAGE TARGETS
+================
+Overall Project:  >80%
+core.py:          >85%
+cli.py:           >80%
+app.py:           >70%
