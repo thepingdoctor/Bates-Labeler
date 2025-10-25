@@ -24,7 +24,14 @@ from tqdm import tqdm
 # New imports for additional features
 import qrcode
 from PIL import Image
-import cairosvg
+
+# Optional Cairo/SVG support - gracefully degrades if not available
+try:
+    import cairosvg
+    CAIRO_AVAILABLE = True
+except (ImportError, OSError):
+    CAIRO_AVAILABLE = False
+    cairosvg = None
 
 
 # Position mappings
@@ -297,6 +304,16 @@ class BatesNumberer:
             
             # Handle SVG files - convert to PNG using cairosvg
             if file_ext == '.svg':
+                if not CAIRO_AVAILABLE:
+                    raise RuntimeError(
+                        "SVG logo support requires Cairo graphics library to be installed.\n\n"
+                        "To enable SVG support, install Cairo for your platform:\n"
+                        "  • macOS:   brew install cairo pkg-config\n"
+                        "  • Ubuntu:  sudo apt-get install libcairo2-dev pkg-config python3-dev\n"
+                        "  • Windows: Install GTK+ runtime from https://www.gtk.org/docs/installations/windows\n\n"
+                        "Alternatively, use PNG, JPG, or WEBP logos which work without additional dependencies."
+                    )
+                
                 try:
                     # Convert SVG to PNG in-memory
                     png_buffer = io.BytesIO()
