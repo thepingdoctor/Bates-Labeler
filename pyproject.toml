@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bates-labeler"
-version = "1.1.0"
+version = "1.1.1"
 description = "Professional Bates numbering tool for legal document management. Add sequential Bates labels to PDF documents for litigation, discovery, and document production."
 authors = ["Adam Blackington <adam@example.com>"]
 license = "MIT"
