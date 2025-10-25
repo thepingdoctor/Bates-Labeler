@@ -54,7 +54,7 @@ tqdm = "^4.66.1"
 streamlit = "^1.28.0"
 qrcode = "^7.4.2"
 Pillow = "^10.0.0"
-svglib = "^1.5.1"
+cairosvg = "^2.7.0"
 streamlit-keyup = "^0.2.0"
 
 # Optional OCR dependencies

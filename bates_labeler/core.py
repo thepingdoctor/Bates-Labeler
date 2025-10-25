@@ -24,8 +24,7 @@ from tqdm import tqdm
 # New imports for additional features
 import qrcode
 from PIL import Image
-from svglib.svglib import svg2rlg
-from reportlab.graphics import renderPDF
+import cairosvg
 
 
 # Position mappings
@@ -296,25 +295,41 @@ class BatesNumberer:
             
             file_ext = os.path.splitext(logo_path)[1].lower()
             
-            # Handle SVG files
+            # Handle SVG files - convert to PNG using cairosvg
             if file_ext == '.svg':
-                drawing = svg2rlg(logo_path)
-                if not drawing:
-                    print(f"Warning: Could not load SVG: {logo_path}")
+                try:
+                    # Convert SVG to PNG in-memory
+                    png_buffer = io.BytesIO()
+                    cairosvg.svg2png(url=logo_path, write_to=png_buffer)
+                    png_buffer.seek(0)
+                    
+                    # Load PNG with PIL
+                    img = Image.open(png_buffer)
+                    
+                    # Get dimensions in points (assuming 72 DPI)
+                    width_pts = img.width * 72 / img.info.get('dpi', (72, 72))[0]
+                    height_pts = img.height * 72 / img.info.get('dpi', (72, 72))[1]
+                    
+                    # Scale to fit within max dimensions
+                    scale_x = self.logo_max_width / width_pts if width_pts > 0 else 1
+                    scale_y = self.logo_max_height / height_pts if height_pts > 0 else 1
+                    scale = min(scale_x, scale_y, 1.0)
+                    
+                    # Store converted image in buffer
+                    final_buffer = io.BytesIO()
+                    img.save(final_buffer, format='PNG')
+                    final_buffer.seek(0)
+                    
+                    return {
+                        'type': 'raster',
+                        'data': final_buffer,
+                        'width': width_pts * scale,
+                        'height': height_pts * scale,
+                        'original_path': logo_path
+                    }
+                except Exception as e:
+                    print(f"Warning: Could not convert SVG: {str(e)}")
                     return None
-                
-                # Scale to fit within max dimensions
-                scale_x = self.logo_max_width / drawing.width if drawing.width > 0 else 1
-                scale_y = self.logo_max_height / drawing.height if drawing.height > 0 else 1
-                scale = min(scale_x, scale_y, 1.0)  # Don't scale up, only down
-                
-                return {
-                    'type': 'svg',
-                    'data': drawing,
-                    'width': drawing.width * scale,
-                    'height': drawing.height * scale,
-                    'scale': scale
-                }
             
             # Handle raster formats (PNG, JPG, WEBP)
             elif file_ext in ['.png', '.jpg', '.jpeg', '.webp']:
@@ -487,16 +502,10 @@ class BatesNumberer:
                 x = (page_width - logo_width) / 2
                 y = (page_height - logo_height) / 2
             
-            # Draw logo based on type
-            if self.logo_image['type'] == 'svg':
-                drawing = self.logo_image['data']
-                scale = self.logo_image['scale']
-                drawing.scale(scale, scale)
-                renderPDF.draw(drawing, c, x, y)
-            else:  # raster
-                c.drawImage(self.logo_image['data'], x, y, 
-                          width=logo_width, height=logo_height,
-                          preserveAspectRatio=True, mask='auto')
+            # Draw logo (all logos are now raster after SVG conversion)
+            c.drawImage(self.logo_image['data'], x, y, 
+                      width=logo_width, height=logo_height,
+                      preserveAspectRatio=True, mask='auto')
                 
         except Exception as e:
             print(f"Error drawing logo: {str(e)}")
