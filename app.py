@@ -297,7 +297,12 @@ def load_config_from_history(history_entry: dict):
 
 def export_config_as_json(config: dict) -> str:
     """Export configuration as JSON string."""
-    return json.dumps(config, indent=2)
+    # Filter out non-serializable items (like functions)
+    serializable_config = {
+        k: v for k, v in config.items() 
+        if not callable(v) and k not in ['status_callback', 'cancel_callback']
+    }
+    return json.dumps(serializable_config, indent=2)
 
 
 def import_config_from_json(json_str: str) -> dict:
