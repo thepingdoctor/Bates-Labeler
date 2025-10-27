@@ -20,6 +20,15 @@ openpyxl>=3.1.0
 # Uncomment to enable cloud OCR
 # google-cloud-vision>=3.4.0
 
+# Optional: AI Analysis Support
+# Uncomment based on your chosen provider:
+# For OpenRouter (recommended - supports multiple models)
+# requests>=2.31.0
+# For Google Cloud Vertex AI / Gemini
+# google-cloud-aiplatform>=1.38.0
+# For Anthropic Claude
+# anthropic>=0.8.0
+
 # Development Dependencies (optional)
 # pytest>=7.4.0
 # pytest-cov>=4.1.0

@@ -141,6 +141,8 @@ def initialize_session_state():
         st.session_state.preview_file_index = 0
     if 'file_progress' not in st.session_state:
         st.session_state.file_progress = {}
+    if 'ai_analysis_results' not in st.session_state:
+        st.session_state.ai_analysis_results = []
     if 'config_presets' not in st.session_state:
         st.session_state.config_presets = {
             'Default': {
@@ -1158,6 +1160,57 @@ def main():
                 google_credentials = None
                 ocr_language = "eng"
 
+            st.divider()
+
+            # AI Document Analysis Settings
+            st.markdown("##### 🤖 AI Document Analysis")
+            enable_ai_analysis = st.checkbox(
+                "Enable AI Analysis",
+                help="Use AI to analyze documents for discrimination patterns, problematic content, and metadata extraction"
+            )
+
+            if enable_ai_analysis:
+                ai_provider = st.selectbox(
+                    "AI Provider",
+                    options=["OpenRouter", "Google Cloud", "Anthropic"],
+                    help="Select your preferred AI provider for document analysis"
+                )
+
+                ai_api_key = st.text_input(
+                    "API Key",
+                    type="password",
+                    help=f"Enter your {ai_provider} API key (kept secure and not stored)"
+                )
+
+                st.markdown("**Analysis Options:**")
+
+                ai_detect_discrimination = st.checkbox(
+                    "Detect Discrimination Patterns",
+                    value=True,
+                    help="Identify potential discriminatory language or content"
+                )
+
+                ai_identify_problematic = st.checkbox(
+                    "Identify Problematic Content",
+                    value=True,
+                    help="Flag potentially sensitive, inappropriate, or legally concerning content"
+                )
+
+                ai_extract_metadata = st.checkbox(
+                    "Extract Metadata",
+                    value=True,
+                    help="Extract document metadata, key entities, and important information"
+                )
+
+                if not ai_api_key:
+                    st.warning("⚠️ Please enter an API key to enable AI analysis")
+            else:
+                ai_provider = None
+                ai_api_key = None
+                ai_detect_discrimination = False
+                ai_identify_problematic = False
+                ai_extract_metadata = False
+
         # Save current configuration state to history (at end of sidebar config)
         current_state = {
             'prefix': prefix,
@@ -1170,6 +1223,11 @@ def main():
             'font_color': font_color,
             'bold': bold,
             'italic': italic,
+            'enable_ai_analysis': enable_ai_analysis,
+            'ai_provider': ai_provider if enable_ai_analysis else None,
+            'ai_detect_discrimination': ai_detect_discrimination,
+            'ai_identify_problematic': ai_identify_problematic,
+            'ai_extract_metadata': ai_extract_metadata,
             'timestamp': datetime.now().isoformat()
         }
 
@@ -1386,8 +1444,14 @@ def main():
             
             # Process files based on selected options (hide default progress bar)
             status_callback("Starting processing...")
-            
+
             st.session_state.processed_files = []
+            st.session_state.ai_analysis_results = []
+
+            # AI Analysis placeholder (will be implemented by AI integration task)
+            if enable_ai_analysis and ai_api_key:
+                status_callback("🤖 AI analysis will be performed after PDF processing...")
+                st.info("🤖 AI Document Analysis is enabled and will analyze processed documents")
             
             # Option 1: Combine PDFs
             if combine_pdfs:
@@ -1583,11 +1647,98 @@ def main():
                     )
         
         st.divider()
-        
+
         if st.button("🗑️ Clear Processed Files", use_container_width=True):
             st.session_state.processed_files = []
+            st.session_state.ai_analysis_results = []
             st.rerun()
-    
+
+    # AI Analysis Results Display
+    if st.session_state.ai_analysis_results:
+        st.divider()
+        st.subheader("🤖 AI Document Analysis Results")
+
+        with st.expander("📊 Analysis Summary", expanded=True):
+            for result in st.session_state.ai_analysis_results:
+                st.markdown(f"**Document:** {result.get('filename', 'Unknown')}")
+
+                # Discrimination findings
+                if result.get('discrimination_findings'):
+                    st.markdown("##### 🚨 Discrimination Patterns Detected")
+                    for finding in result['discrimination_findings']:
+                        severity = finding.get('severity', 'medium')
+                        severity_color = {
+                            'critical': 'red',
+                            'high': 'orange',
+                            'medium': 'yellow',
+                            'low': 'green'
+                        }.get(severity, 'gray')
+
+                        st.markdown(f"""
+                        <div style="background-color: #{severity_color}22; padding: 10px; border-radius: 5px; border-left: 4px solid {severity_color}; margin: 10px 0;">
+                            <strong style="color: {severity_color};">⚠️ {severity.upper()}</strong><br>
+                            {finding.get('description', 'No description available')}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                # Problematic content
+                if result.get('problematic_content'):
+                    st.markdown("##### ⚠️ Problematic Content Identified")
+                    for content in result['problematic_content']:
+                        severity = content.get('severity', 'medium')
+                        severity_color = {
+                            'critical': 'red',
+                            'high': 'orange',
+                            'medium': 'yellow',
+                            'low': 'green'
+                        }.get(severity, 'gray')
+
+                        st.markdown(f"""
+                        <div style="background-color: #{severity_color}22; padding: 10px; border-radius: 5px; border-left: 4px solid {severity_color}; margin: 10px 0;">
+                            <strong style="color: {severity_color};">⚠️ {severity.upper()}</strong><br>
+                            {content.get('description', 'No description available')}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                # Metadata insights
+                if result.get('metadata'):
+                    st.markdown("##### 📋 Document Metadata")
+                    metadata_col1, metadata_col2 = st.columns(2)
+
+                    with metadata_col1:
+                        if result['metadata'].get('key_entities'):
+                            st.markdown("**Key Entities:**")
+                            for entity in result['metadata']['key_entities']:
+                                st.markdown(f"- {entity}")
+
+                    with metadata_col2:
+                        if result['metadata'].get('document_type'):
+                            st.markdown(f"**Document Type:** {result['metadata']['document_type']}")
+                        if result['metadata'].get('language'):
+                            st.markdown(f"**Language:** {result['metadata']['language']}")
+                        if result['metadata'].get('summary'):
+                            st.markdown(f"**Summary:** {result['metadata']['summary']}")
+
+                # Overall analysis status
+                analysis_complete = result.get('analysis_complete', False)
+                if analysis_complete:
+                    st.success("✅ Analysis completed successfully")
+                else:
+                    st.warning("⚠️ Analysis incomplete or encountered errors")
+
+                st.divider()
+
+        # Export analysis results
+        if st.button("📤 Export AI Analysis Results (JSON)", use_container_width=True):
+            analysis_json = json.dumps(st.session_state.ai_analysis_results, indent=2)
+            st.download_button(
+                label="Download AI Analysis Results",
+                data=analysis_json,
+                file_name=f"ai_analysis_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+
     # Footer
     st.divider()
     st.markdown("""

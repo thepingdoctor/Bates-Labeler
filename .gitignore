@@ -166,8 +166,13 @@ sample_*.pdf
 .streamlit/secrets.toml
 .streamlit/cache/
 
+
+# Removed Windows wrapper files per user request
+hive-mind-prompt-*.txt
+
 # Claude Flow generated files
-.claude/settings.local.json
+.claude/
+CLAUDE.md
 .mcp.json
 claude-flow.config.json
 .swarm/
@@ -190,5 +195,22 @@ coordination/orchestration/*
 *.sqlite-journal
 *.sqlite-wal
 claude-flow
-# Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
+
+# Development/build process documentation (not for public repo)
+docs/HIVE_MIND_SUMMARY.md
+docs/PRODUCTION_READINESS_REPORT.md
+docs/VERIFICATION_CHECKLIST.md
+docs/PERFORMANCE_SUMMARY.md
+docs/OPTIMIZATION_REPORT.md
+docs/IMPLEMENTATION_NOTES_REMAINING_FEATURES.md
+docs/BACKEND_IMPLEMENTATION.md
+docs/ARCHITECTURE.md
+docs/AI_REVIEW_REPORT.md
+docs/AI_FINAL_REPORT.md
+docs/AI_MODULE_SUMMARY.md
+docs/AI_UI_Integration.md
+docs/ai-integration-architecture.md
+docs/ai-integration-summary.md
+docs/ai_analysis_example.py
+tests/TEST_SUMMARY.md

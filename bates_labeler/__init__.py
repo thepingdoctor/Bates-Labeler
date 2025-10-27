@@ -17,6 +17,23 @@ from bates_labeler.bates_validation import (
     validate_bates_pattern, parse_bates_number, generate_bates_number
 )
 
+# Optional AI analysis support - gracefully degrades if not available
+try:
+    from bates_labeler.ai_analysis import (
+        AIAnalyzer, AIProvider, CacheManager, AIAnalysisConfig,
+        OpenRouterProvider, GoogleCloudProvider, AnthropicProvider
+    )
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    AIAnalyzer = None
+    AIProvider = None
+    CacheManager = None
+    AIAnalysisConfig = None
+    OpenRouterProvider = None
+    GoogleCloudProvider = None
+    AnthropicProvider = None
+
 __all__ = [
     # Version info
     '__version__',
@@ -42,4 +59,13 @@ __all__ = [
     'validate_bates_pattern',
     'parse_bates_number',
     'generate_bates_number',
+    # AI analysis (optional)
+    'AI_AVAILABLE',
+    'AIAnalyzer',
+    'AIProvider',
+    'CacheManager',
+    'AIAnalysisConfig',
+    'OpenRouterProvider',
+    'GoogleCloudProvider',
+    'AnthropicProvider',
 ]

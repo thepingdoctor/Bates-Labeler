@@ -33,6 +33,14 @@ except (ImportError, OSError):
     CAIRO_AVAILABLE = False
     cairosvg = None
 
+# Optional AI analysis support - gracefully degrades if not available
+try:
+    from bates_labeler.ai_analysis import AIAnalyzer
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    AIAnalyzer = None
+
 
 # Position mappings
 POSITION_COORDINATES = {
@@ -94,7 +102,12 @@ class BatesNumberer:
                  watermark_color: str = "gray",
                  # Callback functions
                  status_callback: Optional[callable] = None,
-                 cancel_callback: Optional[callable] = None):
+                 cancel_callback: Optional[callable] = None,
+                 # AI analysis settings
+                 ai_analysis_enabled: bool = False,
+                 ai_provider: Optional[str] = None,
+                 ai_api_key: Optional[str] = None,
+                 ai_analysis_callback: Optional[callable] = None):
         """
         Initialize Bates numbering configuration.
         
@@ -139,6 +152,10 @@ class BatesNumberer:
             watermark_color: Watermark color
             status_callback: Optional callback function for status updates (message, progress_dict)
             cancel_callback: Optional callback function to check if processing should be cancelled
+            ai_analysis_enabled: Enable AI-powered document analysis
+            ai_provider: AI provider name (e.g., 'anthropic', 'openai')
+            ai_api_key: API key for AI provider
+            ai_analysis_callback: Optional callback function to receive AI analysis results
         """
         self.prefix = prefix
         self.current_number = start_number
@@ -146,6 +163,24 @@ class BatesNumberer:
         # Callback functions
         self.status_callback = status_callback
         self.cancel_callback = cancel_callback
+
+        # AI analysis settings
+        self.ai_analysis_enabled = ai_analysis_enabled
+        self.ai_provider = ai_provider
+        self.ai_api_key = ai_api_key
+        self.ai_analysis_callback = ai_analysis_callback
+        self.ai_analyzer = None
+
+        # Initialize AI analyzer if enabled and available
+        if ai_analysis_enabled and AI_AVAILABLE and ai_provider and ai_api_key:
+            try:
+                self.ai_analyzer = AIAnalyzer(provider=ai_provider, api_key=ai_api_key)
+            except Exception as e:
+                print(f"Warning: Could not initialize AI analyzer: {str(e)}")
+                self.ai_analyzer = None
+        elif ai_analysis_enabled and not AI_AVAILABLE:
+            print("Warning: AI analysis requested but ai_analysis module is not available")
+
         self.padding = padding
         self.suffix = suffix
         self.position = position
@@ -625,15 +660,106 @@ class BatesNumberer:
             # Return empty buffer on error
             return io.BytesIO()
     
+    def _extract_text_from_pdf(self, pdf_path: str, password: Optional[str] = None) -> str:
+        """
+        Extract text content from a PDF file.
+
+        Args:
+            pdf_path: Path to PDF file
+            password: Optional password for encrypted PDFs
+
+        Returns:
+            Extracted text content as a single string
+        """
+        try:
+            reader = PdfReader(pdf_path)
+
+            # Handle encryption
+            if reader.is_encrypted:
+                if password:
+                    if not reader.decrypt(password):
+                        print(f"Warning: Could not decrypt PDF for text extraction")
+                        return ""
+                else:
+                    print(f"Warning: PDF is encrypted but no password provided")
+                    return ""
+
+            # Extract text from all pages
+            text_content = []
+            for page_num, page in enumerate(reader.pages, 1):
+                try:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_content.append(f"--- Page {page_num} ---\n{page_text}")
+                except Exception as e:
+                    print(f"Warning: Could not extract text from page {page_num}: {str(e)}")
+                    continue
+
+            return "\n\n".join(text_content)
+
+        except Exception as e:
+            print(f"Error extracting text from PDF: {str(e)}")
+            return ""
+
+    def analyze_document(self, pdf_path: str, password: Optional[str] = None) -> Optional[Dict]:
+        """
+        Analyze a PDF document using AI.
+
+        Args:
+            pdf_path: Path to PDF file
+            password: Optional password for encrypted PDFs
+
+        Returns:
+            Dict with analysis results or None if analysis failed/disabled
+        """
+        if not self.ai_analysis_enabled or not self.ai_analyzer:
+            return None
+
+        try:
+            if self.status_callback:
+                self.status_callback("Extracting text for AI analysis...", {
+                    'operation': 'ai_text_extraction',
+                    'file': os.path.basename(pdf_path)
+                })
+
+            # Extract text from PDF
+            text_content = self._extract_text_from_pdf(pdf_path, password)
+
+            if not text_content:
+                print("Warning: No text content extracted for AI analysis")
+                return None
+
+            if self.status_callback:
+                self.status_callback("Running AI document analysis...", {
+                    'operation': 'ai_analysis',
+                    'file': os.path.basename(pdf_path)
+                })
+
+            # Perform AI analysis
+            analysis_result = self.ai_analyzer.analyze_document(
+                text_content=text_content,
+                document_name=os.path.basename(pdf_path)
+            )
+
+            # Call callback if provided
+            if self.ai_analysis_callback and analysis_result:
+                self.ai_analysis_callback(analysis_result)
+
+            return analysis_result
+
+        except Exception as e:
+            print(f"Error during AI document analysis: {str(e)}")
+            return None
+
     def get_next_bates_number(self) -> str:
         """Generate the next Bates number in sequence."""
         # Format the number with padding
         number_str = str(self.current_number).zfill(self.padding)
         bates_number = f"{self.prefix}{number_str}{self.suffix}"
-        
+
         # Increment for next call
         self.current_number += 1
-        
+
         return bates_number
     
     def create_separator_page(self, page_width: float, page_height: float,
@@ -850,22 +976,24 @@ class BatesNumberer:
         buffer.seek(0)
         return buffer
     
-    def process_pdf(self, input_path: str, output_path: str, 
+    def process_pdf(self, input_path: str, output_path: str,
                    password: Optional[str] = None,
                    add_separator: bool = False,
-                   return_metadata: bool = False) -> Dict:
+                   return_metadata: bool = False,
+                   run_ai_analysis: bool = True) -> Dict:
         """
         Process a PDF file and add Bates numbers.
-        
+
         Args:
             input_path: Path to input PDF
             output_path: Path to save output PDF
             password: Password for encrypted PDFs
             add_separator: Add separator page at the beginning
             return_metadata: If True, return metadata dict instead of bool
-            
+            run_ai_analysis: If True, run AI analysis if enabled (default: True)
+
         Returns:
-            If return_metadata is True: dict with success, first_bates, last_bates, page_count
+            If return_metadata is True: dict with success, first_bates, last_bates, page_count, ai_analysis
             Otherwise: bool indicating success
         """
         metadata = {
@@ -874,14 +1002,24 @@ class BatesNumberer:
             'first_bates': None,
             'last_bates': None,
             'page_count': 0,
-            'original_filename': os.path.basename(input_path)
+            'original_filename': os.path.basename(input_path),
+            'ai_analysis': None
         }
         try:
             # Check for cancellation
             if self.cancel_callback and self.cancel_callback():
                 metadata['cancelled'] = True
                 return metadata if return_metadata else False
-            
+
+            # Run AI analysis if enabled and requested
+            if run_ai_analysis and self.ai_analysis_enabled and self.ai_analyzer:
+                try:
+                    analysis_result = self.analyze_document(input_path, password)
+                    metadata['ai_analysis'] = analysis_result
+                except Exception as e:
+                    print(f"Warning: AI analysis failed: {str(e)}")
+                    metadata['ai_analysis'] = None
+
             # Read the input PDF
             if self.status_callback:
                 self.status_callback(f"Reading PDF: {os.path.basename(input_path)}", {

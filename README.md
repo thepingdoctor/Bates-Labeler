@@ -53,6 +53,7 @@ poetry run bates --input document.pdf --bates-prefix "CASE-"
 - 📋 **Processing history** - View past processing jobs and their configurations
 - 🎨 **Improved UI** - Wider sidebar (420px), collapsible sections, professional design
 - 📱 **Responsive layout** - Works on different screen sizes
+- 🤖 **AI document analysis** - Detect discrimination, problematic content, and extract metadata
 
 ### Configuration Presets
 - **Default** - Blank slate for custom configurations
@@ -100,6 +101,7 @@ poetry run bates --input document.pdf --bates-prefix "CASE-"
 - ✅ **Page rotation** - Rotate individual pages during processing
 - ✅ **Bates validation** - Real-time format validation with helpful error messages
 - ✅ **Performance optimization** - Parallel processing with 10-15x speed improvements
+- ✅ **AI-powered document analysis** - Discrimination detection, problematic content identification, metadata extraction
 
 ### Customization Options
 - **Position**: Place Bates numbers at various positions on the page
@@ -114,6 +116,7 @@ poetry run bates --input document.pdf --bates-prefix "CASE-"
 - **Borders**: Add decorative borders to separator pages (solid, dashed, double, asterisks)
 - **Watermarks**: Overlay custom text with configurable opacity, rotation, and positioning
 - **Download Options**: Individual files or bundled ZIP archive
+- **AI Analysis**: Detect discrimination patterns, identify problematic content, extract document metadata (optional)
 
 ## 📦 Installation
 
@@ -174,6 +177,24 @@ docker run -p 8501:8501 bates-labeler
 - **openpyxl** - Excel file generation
 
 📖 **[Detailed Installation Guide](PACKAGING.md)** - Poetry setup, publishing to PyPI, and more
+
+### Optional: AI Analysis Dependencies
+
+For AI-powered document analysis, install additional dependencies:
+
+```bash
+# For OpenRouter (recommended)
+pip install requests
+
+# For Google Cloud Vertex AI
+pip install google-cloud-aiplatform
+
+# For Anthropic Claude
+pip install anthropic
+```
+
+📖 **[AI Features Documentation](docs/AI_FEATURES.md)** - Complete guide to AI document analysis
+📖 **[AI Setup Guide](docs/AI_SETUP_GUIDE.md)** - Step-by-step configuration for AI providers
 
 ## 💻 Usage
 
@@ -440,6 +461,20 @@ poetry run bates \
   - Configuration presets and options
   - Deployment options (local, cloud, Docker, self-hosted)
   - Security considerations and troubleshooting
+
+- **[AI_FEATURES.md](docs/AI_FEATURES.md)** - AI document analysis features
+  - Discrimination detection capabilities
+  - Problematic content identification
+  - Metadata extraction
+  - Supported AI providers (OpenRouter, Google Cloud, Anthropic)
+  - Configuration and usage examples
+  - API cost considerations and best practices
+
+- **[AI_SETUP_GUIDE.md](docs/AI_SETUP_GUIDE.md)** - AI analysis setup guide
+  - Environment variable configuration
+  - Provider-specific setup instructions
+  - API key acquisition and security
+  - Testing and troubleshooting
 
 - **[PACKAGING.md](PACKAGING.md)** - Developer guide for Poetry and packaging
   - Poetry setup and configuration
