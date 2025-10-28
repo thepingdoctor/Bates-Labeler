@@ -430,6 +430,33 @@ Save and load configurations for repeated workflows:
 - Load saved configurations with "Load Configuration" or **Ctrl+L**
 - Perfect for repeated processing with the same settings
 
+### Configuration Import/Export
+Share and backup configurations using JSON files:
+- **Export**: Download your current configuration as a JSON file
+  - Click "📤 Export Config (JSON)" in the Processing History section
+  - File includes all settings (prefix, suffix, position, fonts, colors, etc.)
+  - Perfect for backing up or sharing configurations with team members
+- **Import**: Load a previously exported configuration
+  - Click "📥 Import Config (JSON)" and select a .json file
+  - Instantly applies all saved settings
+  - Use the example file: `docs/example_config.json` to see the format
+
+**Example Configuration Format:**
+```json
+{
+  "prefix": "CASE-2024-",
+  "suffix": "-CONF",
+  "start_number": 1,
+  "padding": 6,
+  "position": "bottom-right",
+  "font_name": "Helvetica",
+  "font_size": 12,
+  "font_color": "black"
+}
+```
+
+**Note**: Only JSON files are supported for import. The file must contain valid JSON with recognized configuration keys.
+
 ### Undo/Redo
 Full state management for configuration changes:
 - Use **Ctrl+Z** to undo the last change

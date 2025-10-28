@@ -1,0 +1,17 @@
+{
+  "prefix": "CASE-2024-",
+  "suffix": "-CONF",
+  "start_number": 1,
+  "padding": 6,
+  "position": "bottom-right",
+  "font_name": "Helvetica",
+  "font_size": 12,
+  "font_color": "black",
+  "font_bold": true,
+  "font_italic": false,
+  "include_date": false,
+  "date_format": "%Y-%m-%d",
+  "white_background": false,
+  "bg_padding": 2,
+  "description": "Example Bates-Labeler configuration for legal discovery production"
+}
