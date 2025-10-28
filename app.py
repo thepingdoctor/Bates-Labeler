@@ -310,8 +310,12 @@ def export_config_as_json(config: dict) -> str:
 def import_config_from_json(json_str: str) -> dict:
     """Import configuration from JSON string."""
     try:
-        return json.loads(json_str)
-    except json.JSONDecodeError:
+        config = json.loads(json_str)
+        # Validate that it's a dictionary
+        if not isinstance(config, dict):
+            return None
+        return config
+    except json.JSONDecodeError as e:
         return None
 
 
@@ -723,16 +727,22 @@ def main():
 
             if uploaded_config:
                 try:
-                    config_str = uploaded_config.read().decode('utf-8')
-                    imported_config = import_config_from_json(config_str)
-                    if imported_config:
-                        st.session_state.current_config = imported_config
-                        st.success("✅ Configuration imported successfully!")
-                        st.rerun()
+                    # Check file extension
+                    if not uploaded_config.name.endswith('.json'):
+                        st.error("❌ Invalid file type. Only JSON files (.json) are supported for configuration import.")
                     else:
-                        st.error("❌ Invalid configuration file")
+                        config_str = uploaded_config.read().decode('utf-8')
+                        imported_config = import_config_from_json(config_str)
+                        if imported_config:
+                            st.session_state.current_config = imported_config
+                            st.success("✅ Configuration imported successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Invalid JSON format. Please ensure the file contains valid JSON with configuration keys. See docs/example_config.json for the correct format.")
+                except UnicodeDecodeError:
+                    st.error("❌ Unable to read file. Please ensure it's a text-based JSON file, not a binary file.")
                 except Exception as e:
-                    st.error(f"❌ Error importing config: {str(e)}")
+                    st.error(f"❌ Error importing configuration: {str(e)}\n\nPlease check that your file is a valid JSON configuration file. See docs/example_config.json for an example.")
 
         st.divider()
         
