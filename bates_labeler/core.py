@@ -1244,11 +1244,16 @@ class BatesNumberer:
             print(f"Combining {len(input_files)} PDF files...")
             
             for file_idx, input_path in enumerate(input_files, 1):
+                # Get original filename first (before any print statements)
+                original_name = (original_filenames[file_idx - 1] 
+                               if original_filenames and file_idx - 1 < len(original_filenames) 
+                               else os.path.basename(input_path))
+                
                 if not os.path.exists(input_path):
                     print(f"Warning: File not found: {input_path}")
                     continue
                 
-                print(f"Processing file {file_idx}/{len(input_files)}: {os.path.basename(input_path)}")
+                print(f"Processing file {file_idx}/{len(input_files)}: {original_name}")
                 reader = PdfReader(input_path)
                 
                 # Handle encryption
@@ -1299,10 +1304,7 @@ class BatesNumberer:
 
                     total_pages += 1
                 
-                # Track document metadata - use original filename if provided
-                original_name = (original_filenames[file_idx - 1] 
-                               if original_filenames and file_idx - 1 < len(original_filenames) 
-                               else os.path.basename(input_path))
+                # Track document metadata
                 doc_info = {
                     'original_filename': original_name,
                     'first_bates': first_bates,
