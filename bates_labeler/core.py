@@ -835,20 +835,28 @@ class BatesNumberer:
             elements.append(title)
             elements.append(Spacer(1, 30))
             
+            # Create a custom style for document names with word wrapping
+            doc_name_style = styles['Normal'].clone('DocNameStyle')
+            doc_name_style.fontSize = 9
+            doc_name_style.leading = 11  # Line spacing
+            doc_name_style.wordWrap = 'LTR'
+            
             # Table header
             table_data = [['Document Name', 'First Bates', 'Last Bates', 'Pages']]
             
-            # Add document rows
+            # Add document rows with Paragraph objects for document names to enable wrapping
             for doc_info in documents:
+                # Use Paragraph for document name to enable text wrapping
+                doc_name = Paragraph(doc_info.get('original_filename', ''), doc_name_style)
                 table_data.append([
-                    doc_info.get('original_filename', ''),
+                    doc_name,
                     doc_info.get('first_bates', ''),
                     doc_info.get('last_bates', ''),
                     str(doc_info.get('page_count', 0))
                 ])
             
-            # Create table with appropriate column widths
-            table = Table(table_data, colWidths=[240, 120, 120, 60])
+            # Create table with adjusted column widths - more space for document name
+            table = Table(table_data, colWidths=[300, 90, 90, 60])
             table.setStyle(TableStyle([
                 # Header row styling
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
@@ -858,16 +866,20 @@ class BatesNumberer:
                 ('FONTSIZE', (0, 0), (-1, 0), 11),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
                 ('TOPPADDING', (0, 0), (-1, 0), 12),
+                ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
                 
                 # Data rows styling
                 ('BACKGROUND', (0, 1), (-1, -1), colors.white),
                 ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
                 ('ALIGN', (0, 1), (0, -1), 'LEFT'),  # Left align document names
                 ('ALIGN', (1, 1), (-1, -1), 'CENTER'),  # Center align other columns
-                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('VALIGN', (0, 1), (-1, -1), 'TOP'),  # Top align for wrapped text
+                ('FONTNAME', (1, 1), (-1, -1), 'Helvetica'),  # Font for non-Paragraph cells
+                ('FONTSIZE', (1, 1), (-1, -1), 9),
                 ('TOPPADDING', (0, 1), (-1, -1), 8),
                 ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+                ('LEFTPADDING', (0, 1), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 1), (-1, -1), 6),
                 
                 # Grid and borders
                 ('GRID', (0, 0), (-1, -1), 1, colors.black),
@@ -1237,6 +1249,9 @@ class BatesNumberer:
         }
         
         try:
+            # DEBUG: Print original_filenames parameter
+            print(f"DEBUG: original_filenames parameter = {original_filenames}")
+            
             writer = PdfWriter()
             all_documents = []
             total_pages = 0
