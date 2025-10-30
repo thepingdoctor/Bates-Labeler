@@ -425,12 +425,13 @@ def process_pdf(uploaded_file, config: dict, add_separator: bool = False, return
         if numberer is None:
             numberer = BatesNumberer(**config)
         
-        # Process the PDF
+        # Process the PDF - pass original filename to preserve it in metadata
         result = numberer.process_pdf(
             tmp_input_path,
             tmp_output_path,
             add_separator=add_separator,
-            return_metadata=return_metadata
+            return_metadata=return_metadata,
+            original_filename=uploaded_file.name
         )
         
         if return_metadata:
@@ -478,13 +479,15 @@ def process_pdf(uploaded_file, config: dict, add_separator: bool = False, return
 def process_combined_pdfs(uploaded_files, config: dict, add_document_separators: bool = False, add_index_page: bool = False):
     """Process and combine multiple PDFs into a single file."""
     try:
-        # Create temporary input files
+        # Create temporary input files and collect original filenames
         temp_files = []
+        original_filenames = []
         for uploaded_file in uploaded_files:
             tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
             tmp_file.write(uploaded_file.read())
             tmp_file.close()
             temp_files.append(tmp_file.name)
+            original_filenames.append(uploaded_file.name)
         
         # Create temporary output file
         tmp_output = tempfile.NamedTemporaryFile(delete=False, suffix='_combined_bates.pdf')
@@ -494,12 +497,13 @@ def process_combined_pdfs(uploaded_files, config: dict, add_document_separators:
         # Create BatesNumberer instance
         numberer = BatesNumberer(**config)
         
-        # Combine and process PDFs
+        # Combine and process PDFs - pass original filenames to preserve them in metadata
         result = numberer.combine_and_process_pdfs(
             temp_files,
             tmp_output_path,
             add_document_separators=add_document_separators,
-            add_index_page=add_index_page
+            add_index_page=add_index_page,
+            original_filenames=original_filenames
         )
         
         # Clean up temporary input files

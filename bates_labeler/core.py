@@ -980,7 +980,8 @@ class BatesNumberer:
                    password: Optional[str] = None,
                    add_separator: bool = False,
                    return_metadata: bool = False,
-                   run_ai_analysis: bool = True) -> Dict:
+                   run_ai_analysis: bool = True,
+                   original_filename: Optional[str] = None) -> Dict:
         """
         Process a PDF file and add Bates numbers.
 
@@ -991,6 +992,7 @@ class BatesNumberer:
             add_separator: Add separator page at the beginning
             return_metadata: If True, return metadata dict instead of bool
             run_ai_analysis: If True, run AI analysis if enabled (default: True)
+            original_filename: Original filename to use in metadata (if None, uses basename of input_path)
 
         Returns:
             If return_metadata is True: dict with success, first_bates, last_bates, page_count, ai_analysis
@@ -1002,7 +1004,7 @@ class BatesNumberer:
             'first_bates': None,
             'last_bates': None,
             'page_count': 0,
-            'original_filename': os.path.basename(input_path),
+            'original_filename': original_filename or os.path.basename(input_path),
             'ai_analysis': None
         }
         try:
@@ -1211,7 +1213,8 @@ class BatesNumberer:
     def combine_and_process_pdfs(self, input_files: List[str], output_path: str,
                                  add_document_separators: bool = False,
                                  add_index_page: bool = False,
-                                 password: Optional[str] = None) -> Dict:
+                                 password: Optional[str] = None,
+                                 original_filenames: Optional[List[str]] = None) -> Dict:
         """
         Combine multiple PDFs and add Bates numbers to the combined document.
         
@@ -1221,6 +1224,7 @@ class BatesNumberer:
             add_document_separators: Add separator pages between documents
             add_index_page: Add index page at the beginning listing all documents
             password: Password for encrypted PDFs
+            original_filenames: Optional list of original filenames matching input_files (if None, uses basename of each path)
             
         Returns:
             Dict with success status and document metadata list
@@ -1295,9 +1299,12 @@ class BatesNumberer:
 
                     total_pages += 1
                 
-                # Track document metadata
+                # Track document metadata - use original filename if provided
+                original_name = (original_filenames[file_idx - 1] 
+                               if original_filenames and file_idx - 1 < len(original_filenames) 
+                               else os.path.basename(input_path))
                 doc_info = {
-                    'original_filename': os.path.basename(input_path),
+                    'original_filename': original_name,
                     'first_bates': first_bates,
                     'last_bates': last_bates,
                     'page_count': num_pages
