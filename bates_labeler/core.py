@@ -1260,10 +1260,10 @@ class BatesNumberer:
                 if reader.is_encrypted:
                     if password:
                         if not reader.decrypt(password):
-                            print(f"Error: Invalid password for {input_path}")
+                            print(f"Error: Invalid password for {original_name}")
                             continue
                     else:
-                        print(f"Warning: Skipping encrypted file {input_path}")
+                        print(f"Warning: Skipping encrypted file {original_name}")
                         continue
                 
                 num_pages = len(reader.pages)
