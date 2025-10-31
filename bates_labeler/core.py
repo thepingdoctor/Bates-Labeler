@@ -15,6 +15,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfbase import pdfmetrics
@@ -595,8 +596,8 @@ class BatesNumberer:
             if 'top' in self.qr_position:
                 y = page_height - self.qr_size - (0.5 * inch)
 
-            # Draw QR code from buffer
-            c.drawImage(qr_buffer, x, y, width=self.qr_size, height=self.qr_size)
+            # Draw QR code from buffer using ImageReader
+            c.drawImage(ImageReader(qr_buffer), x, y, width=self.qr_size, height=self.qr_size)
 
         except Exception as e:
             print(f"Error drawing QR code: {str(e)}")
