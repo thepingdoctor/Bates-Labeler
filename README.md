@@ -118,6 +118,185 @@ poetry run bates --input document.pdf --bates-prefix "CASE-"
 - **Download Options**: Individual files or bundled ZIP archive
 - **AI Analysis**: Detect discrimination patterns, identify problematic content, extract document metadata (optional)
 
+---
+
+## 🚀 What's New in v2.2.0 - Enterprise Features
+
+**Version 2.2.0** introduces five powerful enterprise features for advanced workflows, automation, and team collaboration:
+
+### 1. 🎛️ Enhanced Configuration Manager
+**Centralized, validated configuration management with team collaboration**
+
+- **Type-safe configurations** with Pydantic validation
+- **Configuration inheritance** - Create child configs that inherit parent settings
+- **Environment variables** - Configure via `BATES_*` environment variables
+- **Import/Export** - Share configurations across your team as JSON files
+- **Default management** - Set default configurations for consistent workflows
+- **Configuration namespacing** - Organize configs by project or team
+
+```python
+from bates_labeler import ConfigManager
+
+manager = ConfigManager()
+config = manager.create_config("legal_discovery", {
+    "prefix": "DISC-",
+    "start_number": 1,
+    "padding": 6
+})
+manager.save_config("legal_discovery")
+manager.export_config("legal_discovery", "team_config.json")
+```
+
+📖 **[Configuration Manager Guide](docs/FEATURES_V2_2.md#1-enhanced-configuration-manager)**
+
+### 2. 📋 Template Management System
+**Template library for saving and sharing complex workflows**
+
+- **Pre-built templates** - Legal Discovery, Confidential Documents, Exhibits
+- **Custom templates** - Save your own configurations for reuse
+- **Categorization & tagging** - Organize templates by category and searchable tags
+- **Template search** - Find templates by name, description, or tags
+- **Template duplication** - Create variations from existing templates
+- **Team sharing** - Export/import templates for team collaboration
+
+```python
+from bates_labeler import TemplateManager
+
+manager = TemplateManager()
+template = manager.create_template(
+    name="Company Confidential",
+    config={
+        "prefix": "CONF-",
+        "enable_watermark": True,
+        "watermark_text": "CONFIDENTIAL"
+    },
+    category="confidential",
+    tags=["internal", "restricted"]
+)
+manager.save_template("Company Confidential")
+```
+
+📖 **[Template Manager Guide](docs/FEATURES_V2_2.md#2-template-management-system)**
+
+### 3. ⏰ Batch Job Scheduler
+**Automated scheduling for recurring batch processing**
+
+- **One-time jobs** - Schedule processing for specific date/time
+- **Recurring jobs** - Cron-like scheduling (daily, weekly, monthly)
+- **Watch folders** - Automatically process new files dropped in folders
+- **Job queue** - Manage concurrent job limits and priorities
+- **Status tracking** - Monitor job progress and history
+- **Error handling** - Automatic retries and failure notifications
+
+```python
+from bates_labeler import BatchScheduler
+from datetime import datetime, timedelta
+
+scheduler = BatchScheduler(max_concurrent_jobs=3)
+scheduler.start()
+
+# Schedule nightly processing at 2am
+scheduler.schedule_recurring_job(
+    name="Nightly Processing",
+    cron_expression="0 2 * * *",
+    process_func=process_batch,
+    config={"prefix": "BATCH-"}
+)
+
+# Watch folder for auto-processing
+scheduler.setup_watch_folder(
+    name="Auto Process",
+    watch_path="/path/to/incoming",
+    process_func=process_batch,
+    pattern="*.pdf",
+    interval_seconds=60
+)
+```
+
+📖 **[Batch Scheduler Guide](docs/FEATURES_V2_2.md#3-batch-job-scheduler)**
+
+### 4. ☁️ Cloud Storage Integration
+**Seamless integration with major cloud storage providers**
+
+- **Google Drive** - Process files directly from Drive
+- **Dropbox** - Automatic sync with Dropbox folders
+- **AWS S3** - Enterprise storage integration
+- **Unified API** - Same interface across all providers
+- **Upload/download** - Transfer files with progress tracking
+- **File listing** - Search and filter cloud files
+
+```python
+from bates_labeler import CloudStorageManager, BatesNumberer
+
+manager = CloudStorageManager()
+manager.add_provider('my_drive', 'google_drive', {
+    'credentials_file': 'credentials.json'
+})
+
+drive = manager.get_provider('my_drive')
+drive.download_file('file_id', 'input.pdf')
+
+numberer = BatesNumberer(prefix="CLOUD-")
+numberer.process_pdf('input.pdf', 'output.pdf')
+
+drive.upload_file('output.pdf', 'processed/output.pdf')
+```
+
+📖 **[Cloud Storage Guide](docs/FEATURES_V2_2.md#4-cloud-storage-integration)**
+
+### 5. 📝 PDF Form Field Preservation
+**Preserve interactive PDF forms during Bates numbering**
+
+- **Form detection** - Automatically detect interactive forms
+- **Field preservation** - Maintain form functionality after processing
+- **AcroForms support** - Support for standard PDF forms
+- **Field validation** - Verify forms are preserved correctly
+- **Form summary** - Generate reports of form fields
+
+```python
+from bates_labeler import PDFFormHandler, BatesNumberer
+
+handler = PDFFormHandler()
+
+if handler.has_form_fields("application.pdf"):
+    summary = handler.get_form_summary("application.pdf")
+    print(f"Found {summary['total_fields']} form fields")
+
+    # Process with Bates numbers
+    numberer = BatesNumberer(prefix="FORM-")
+    # ... process PDF ...
+
+    # Preserve forms in output
+    handler.preserve_form_fields(
+        "application.pdf",
+        "application_numbered.pdf",
+        processed_data
+    )
+```
+
+📖 **[Form Handler Guide](docs/FEATURES_V2_2.md#5-pdf-form-field-preservation)**
+
+### Installation of v2.2.0 Features
+
+**Basic features** work out of the box. **Advanced features** require optional dependencies:
+
+```bash
+# All new features
+pip install "bates-labeler[all]"
+
+# Or install specific feature groups
+pip install "bates-labeler[advanced]"       # Config + Scheduler
+pip install "bates-labeler[cloud-storage]"  # Cloud integrations
+pip install "bates-labeler[ai-analysis]"    # AI features
+
+# With Poetry
+poetry install -E all
+```
+
+**Graceful degradation:** All features are optional. Core Bates numbering works without any optional dependencies.
+
+📖 **[Complete v2.2.0 Documentation](docs/FEATURES_V2_2.md)** - Comprehensive guide with examples, best practices, and troubleshooting
+
 ## 📦 Installation
 
 ### Requirements

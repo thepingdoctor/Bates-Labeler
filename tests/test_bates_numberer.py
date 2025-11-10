@@ -101,7 +101,7 @@ class TestBatesNumberer:
 def test_version():
     """Test that version is defined."""
     from bates_labeler import __version__
-    assert __version__ == "1.1.1"
+    assert __version__ == "2.2.0"
 
 
 def test_module_imports():

@@ -32,6 +32,52 @@ except ImportError:
     OCR_AVAILABLE = False
     print("Warning: OCR dependencies not installed. OCR features will be disabled.")
 
+# Import v2.2.0 new features (all gracefully degrade if unavailable)
+try:
+    from bates_labeler import (
+        TemplateManager, Template, TemplateMetadata,
+        TEMPLATE_MANAGER_AVAILABLE
+    )
+except ImportError:
+    TEMPLATE_MANAGER_AVAILABLE = False
+    print("Info: Template Manager not available. Install with: pip install 'bates-labeler[advanced]'")
+
+try:
+    from bates_labeler import (
+        ConfigManager, BatesConfig, load_config_from_env,
+        CONFIG_MANAGER_AVAILABLE
+    )
+except ImportError:
+    CONFIG_MANAGER_AVAILABLE = False
+    print("Info: Configuration Manager not available. Install with: pip install 'bates-labeler[advanced]'")
+
+try:
+    from bates_labeler import (
+        CloudStorageManager, GoogleDriveProvider, DropboxProvider,
+        CLOUD_STORAGE_AVAILABLE
+    )
+except ImportError:
+    CLOUD_STORAGE_AVAILABLE = False
+    print("Info: Cloud Storage not available. Install with: pip install 'bates-labeler[cloud-storage]'")
+
+try:
+    from bates_labeler import (
+        PDFFormHandler, FormFieldInfo,
+        FORM_HANDLER_AVAILABLE
+    )
+except ImportError:
+    FORM_HANDLER_AVAILABLE = False
+    print("Info: Form Handler not available (using pypdf).")
+
+try:
+    from bates_labeler import (
+        BatchScheduler, Job, JobStatus, JobType,
+        SCHEDULER_AVAILABLE
+    )
+except ImportError:
+    SCHEDULER_AVAILABLE = False
+    print("Info: Batch Scheduler not available. Install with: pip install 'bates-labeler[advanced]'")
+
 # Page configuration
 st.set_page_config(
     page_title="Bates Numbering Tool",
@@ -687,6 +733,26 @@ def main():
         else:
             preset_config = st.session_state.config_presets['Default']
 
+        # v2.2.0 NEW FEATURES - Template Manager
+        if TEMPLATE_MANAGER_AVAILABLE:
+            from bates_labeler.streamlit_ui_extensions import render_template_manager_ui
+            if 'template_manager' not in st.session_state:
+                st.session_state.template_manager = TemplateManager()
+            loaded_template = render_template_manager_ui(st.session_state.template_manager)
+            if loaded_template:
+                st.session_state.current_config = loaded_template
+                st.rerun()
+
+        # v2.2.0 NEW FEATURES - Configuration Manager
+        if CONFIG_MANAGER_AVAILABLE:
+            from bates_labeler.streamlit_ui_extensions import render_config_manager_ui
+            if 'config_manager' not in st.session_state:
+                st.session_state.config_manager = ConfigManager()
+            loaded_config = render_config_manager_ui(st.session_state.config_manager)
+            if loaded_config:
+                st.session_state.current_config = loaded_config
+                st.rerun()
+
         # Processing History - Load previous configurations
         with st.expander("📚 Processing History", expanded=False):
             if st.session_state.processing_history:
@@ -1265,7 +1331,15 @@ def main():
     
     with col1:
         st.subheader("📤 Upload PDF Files")
-        
+
+        # v2.2.0 NEW FEATURES - Cloud Storage
+        from bates_labeler.streamlit_ui_extensions import render_cloud_storage_ui
+        render_cloud_storage_ui()
+
+        # v2.2.0 NEW FEATURES - Scheduler Info
+        from bates_labeler.streamlit_ui_extensions import render_scheduler_ui
+        render_scheduler_ui()
+
         # File uploader
         uploaded_files = st.file_uploader(
             "Choose PDF file(s)",
@@ -1273,7 +1347,12 @@ def main():
             accept_multiple_files=True,
             help="Upload one or more PDF files to add Bates numbers"
         )
-        
+
+        # v2.2.0 NEW FEATURES - Form Detection
+        if uploaded_files:
+            from bates_labeler.streamlit_ui_extensions import render_form_detection_ui
+            render_form_detection_ui(uploaded_files)
+
         if uploaded_files:
             st.success(f"✅ {len(uploaded_files)} file(s) uploaded")
 
