@@ -82,6 +82,88 @@ except ImportError:
     PDFFormHandler = None
     FormFieldInfo = None
 
+# v2.3.0 Advanced features - gracefully degrade if dependencies not available
+try:
+    from bates_labeler.pdf_validator_advanced import (
+        PDFValidatorAdvanced, ValidationReport as AdvancedValidationReport,
+        ValidationIssue as AdvancedValidationIssue, RepairStrategy,
+        validate_before_processing
+    )
+    ADVANCED_VALIDATOR_AVAILABLE = True
+except ImportError:
+    ADVANCED_VALIDATOR_AVAILABLE = False
+    PDFValidatorAdvanced = None
+    AdvancedValidationReport = None
+    AdvancedValidationIssue = None
+    RepairStrategy = None
+    validate_before_processing = None
+
+try:
+    from bates_labeler.redaction import (
+        RedactionEngine, RedactionType, RedactionMethod,
+        RedactionPattern, RedactionZone, RedactionResult, quick_redact
+    )
+    REDACTION_AVAILABLE = True
+except ImportError:
+    REDACTION_AVAILABLE = False
+    RedactionEngine = None
+    RedactionType = None
+    RedactionMethod = None
+    RedactionPattern = None
+    RedactionZone = None
+    RedactionResult = None
+    quick_redact = None
+
+try:
+    from bates_labeler.i18n import (
+        I18nManager, Language, LocaleInfo, TextDirection,
+        get_i18n, init_i18n, t
+    )
+    I18N_AVAILABLE = True
+except ImportError:
+    I18N_AVAILABLE = False
+    I18nManager = None
+    Language = None
+    LocaleInfo = None
+    TextDirection = None
+    get_i18n = None
+    init_i18n = None
+    t = None
+
+try:
+    from bates_labeler.pdf_compare import (
+        PDFComparator, ComparisonResult, PageDifference,
+        DifferenceType, ComparisonMode, quick_compare, verify_bates_numbering
+    )
+    PDF_COMPARE_AVAILABLE = True
+except ImportError:
+    PDF_COMPARE_AVAILABLE = False
+    PDFComparator = None
+    ComparisonResult = None
+    PageDifference = None
+    DifferenceType = None
+    ComparisonMode = None
+    quick_compare = None
+    verify_bates_numbering = None
+
+try:
+    from bates_labeler.audit_log import (
+        AuditLogger, AuditEvent, AuditReport,
+        EventType, EventSeverity, ComplianceStandard,
+        get_audit_logger, init_audit_logger
+    )
+    AUDIT_LOG_AVAILABLE = True
+except ImportError:
+    AUDIT_LOG_AVAILABLE = False
+    AuditLogger = None
+    AuditEvent = None
+    AuditReport = None
+    EventType = None
+    EventSeverity = None
+    ComplianceStandard = None
+    get_audit_logger = None
+    init_audit_logger = None
+
 __all__ = [
     # Version info
     '__version__',
@@ -141,4 +223,48 @@ __all__ = [
     'FORM_HANDLER_AVAILABLE',
     'PDFFormHandler',
     'FormFieldInfo',
+    # Advanced PDF Validation (v2.3.0+)
+    'ADVANCED_VALIDATOR_AVAILABLE',
+    'PDFValidatorAdvanced',
+    'AdvancedValidationReport',
+    'AdvancedValidationIssue',
+    'RepairStrategy',
+    'validate_before_processing',
+    # Redaction System (v2.3.0+)
+    'REDACTION_AVAILABLE',
+    'RedactionEngine',
+    'RedactionType',
+    'RedactionMethod',
+    'RedactionPattern',
+    'RedactionZone',
+    'RedactionResult',
+    'quick_redact',
+    # Multi-Language Support (v2.3.0+)
+    'I18N_AVAILABLE',
+    'I18nManager',
+    'Language',
+    'LocaleInfo',
+    'TextDirection',
+    'get_i18n',
+    'init_i18n',
+    't',
+    # PDF Comparison (v2.3.0+)
+    'PDF_COMPARE_AVAILABLE',
+    'PDFComparator',
+    'ComparisonResult',
+    'PageDifference',
+    'DifferenceType',
+    'ComparisonMode',
+    'quick_compare',
+    'verify_bates_numbering',
+    # Audit Logging (v2.3.0+)
+    'AUDIT_LOG_AVAILABLE',
+    'AuditLogger',
+    'AuditEvent',
+    'AuditReport',
+    'EventType',
+    'EventSeverity',
+    'ComplianceStandard',
+    'get_audit_logger',
+    'init_audit_logger',
 ]
